@@ -1,0 +1,88 @@
+{
+  "schemaVersion": 4,
+  "platform": "darwin",
+  "shortcut": "Alt+Q",
+  "launchAtLogin": false,
+  "overlay": {
+    "alpha": 0.77,
+    "radius": 28,
+    "slotCount": 8,
+    "showIcons": true
+  },
+  "tabs": [
+    {
+      "id": "pinned",
+      "name": "고정 앱",
+      "type": "pinned-apps",
+      "slots": [
+        {
+          "id": "vscode",
+          "name": "memo",
+          "label": "mem",
+          "action": {
+            "type": "launch_app",
+            "bundleId": "com.apple.Notes"
+          }
+        },
+        {
+          "id": "chrome",
+          "name": "Chrome",
+          "label": "CH",
+          "action": {
+            "type": "launch_app",
+            "bundleId": "com.google.Chrome"
+          }
+        },
+        {
+          "id": "finder",
+          "name": "Finder",
+          "label": "FI",
+          "action": {
+            "type": "launch_app",
+            "bundleId": "com.apple.finder"
+          }
+        },
+        {
+          "id": "terminal",
+          "name": "Terminal",
+          "label": "TM",
+          "action": {
+            "type": "launch_app",
+            "bundleId": "com.apple.Terminal"
+          }
+        },
+        {
+          "id": "figma",
+          "name": "Orca",
+          "label": "oc",
+          "action": {
+            "type": "launch_app",
+            "bundleId": "com.stablyai.orca"
+          }
+        },
+        {
+          "id": "calendar",
+          "name": "Calendar",
+          "label": "CA",
+          "action": {
+            "type": "launch_app",
+            "bundleId": "com.apple.iCal"
+          }
+        },
+        {
+          "id": "slot-d9d1ma",
+          "name": "카카오톡",
+          "action": {
+            "type": "launch_app",
+            "bundleId": "com.kakao.KakaoTalkMac"
+          }
+        }
+      ]
+    },
+    {
+      "id": "recent",
+      "name": "최근 앱",
+      "type": "recent-apps"
+    }
+  ]
+}

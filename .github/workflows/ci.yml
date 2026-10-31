@@ -1,0 +1,71 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]  # 태그는 release.yml 이 빌드한다
+  pull_request:
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash  # bash --noprofile --norc -eo pipefail
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-14, macos-15, macos-26, macos-15-intel]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Environment
+        run: |
+          sw_vers
+          uname -m
+          /usr/bin/swiftc --version
+
+      - name: Shell syntax
+        run: |
+          for f in $(git ls-files '*.sh'); do
+            bash -n "$f"
+            echo "ok $f"
+          done
+
+      - name: Swift tests
+        run: tests/swift/run.sh
+
+      - name: Build
+        run: ./build.sh
+
+      - name: Verify app
+        run: .github/verify-app.sh build/QuickStream.app "$(/usr/bin/plutil -extract CFBundleShortVersionString raw Info.plist)"
+
+      - name: Launch smoke test
+        timeout-minutes: 3
+        run: |
+          # 설정·로그는 임시 HOME 에만 쓴다. 오버레이는 단축키로만 열리므로 창 없이 떠 있기만 하면 된다.
+          home=$(mktemp -d)
+          app_bin="$GITHUB_WORKSPACE/build/QuickStream.app/Contents/MacOS/QuickStream"
+          HOME=$home "$app_bin" > "$RUNNER_TEMP/app.log" 2>&1 &
+          pid=$!
+          for _ in $(seq 8); do
+            sleep 1
+            if ! kill -0 "$pid" 2>/dev/null; then
+              echo "::error::QuickStream exited during launch"
+              cat "$RUNNER_TEMP/app.log"
+              exit 1
+            fi
+          done
+          kill "$pid"
+          echo "QuickStream was still running after 8 seconds"

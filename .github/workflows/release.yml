@@ -1,0 +1,86 @@
+# 푸시된 vX.Y.Z 태그의 릴리스 zip 을 빌드하고, 출처 증명(attestation)을 만들고, DRAFT 릴리스에 올린다.
+# 메인테이너가 실행하는 release.sh 가 draft 를 검증·공개하고 Homebrew cask 를 갱신한다.
+# 이 워크플로를 다시 실행하면 draft 의 zip 이 교체된다.
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+  id-token: write
+  attestations: write
+
+defaults:
+  run:
+    shell: bash  # bash --noprofile --norc -eo pipefail
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: macos-15
+    timeout-minutes: 30
+    env:
+      TAG: ${{ github.ref_name }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Check tag, version and changelog
+        run: |
+          version=${TAG#v}
+          [[ $version =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "::error::Tag $TAG is not vX.Y.Z"; exit 1; }
+          plist_version=$(/usr/bin/plutil -extract CFBundleShortVersionString raw Info.plist)
+          [[ $plist_version == "$version" ]] || { echo "::error::Info.plist says $plist_version, tag says $version"; exit 1; }
+          awk -v v="$version" '$1 == "##" && $2 == v {f = 1; next} f && /^## / {exit} f' CHANGELOG.md \
+            | sed -e '/./,$!d' > "$RUNNER_TEMP/changelog.md"
+          grep -q '[^[:space:]]' "$RUNNER_TEMP/changelog.md" || { echo "::error::CHANGELOG.md has no '## $version' section"; exit 1; }
+          echo "VERSION=$version" >> "$GITHUB_ENV"
+
+      - name: Swift tests
+        run: tests/swift/run.sh
+
+      - name: Build
+        run: ./build.sh
+
+      - name: Verify app
+        run: .github/verify-app.sh build/QuickStream.app "$VERSION"
+
+      - name: Zip
+        run: |
+          mkdir dist
+          /usr/bin/ditto -c -k --sequesterRsrc --keepParent build/QuickStream.app "dist/QuickStream-$VERSION.zip"
+          shasum -a 256 "dist/QuickStream-$VERSION.zip"
+
+      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: dist/QuickStream-${{ env.VERSION }}.zip
+
+      - name: Upload to draft release
+        env:
+          GH_TOKEN: ${{ github.token }}  # 저장소에 쓰는 단계는 이것뿐
+        run: |
+          notes="$RUNNER_TEMP/notes.md"
+          {
+            cat "$RUNNER_TEMP/changelog.md"
+            echo
+            echo "---"
+            echo "Built by GitHub Actions on the ${ImageOS:-macOS} runner image ${ImageVersion:-unknown} ($RUNNER_ARCH) with $(/usr/bin/swiftc --version 2>&1 | head -1)."
+            echo "Verify the download with \`gh attestation verify QuickStream-$VERSION.zip -R $GITHUB_REPOSITORY --signer-workflow $GITHUB_REPOSITORY/.github/workflows/release.yml --source-ref refs/tags/$TAG\`."
+          } > "$notes"
+          zip="dist/QuickStream-$VERSION.zip"
+          if found=$(gh release view "$TAG" --json isDraft --jq .isDraft 2>&1); then
+            [[ $found == true ]] || { echo "::error::Release $TAG is already published; release a new version instead"; exit 1; }
+            gh release edit "$TAG" --title "QuickStream $VERSION" --notes-file "$notes"
+            gh release upload "$TAG" "$zip" --clobber
+          elif [[ $found == *"release not found"* ]]; then
+            gh release create "$TAG" "$zip" --draft --verify-tag --title "QuickStream $VERSION" --notes-file "$notes"
+          else
+            echo "::error::Could not look up release $TAG: $found"; exit 1
+          fi

@@ -1,0 +1,10 @@
+# Swift 빌드 산출물
+build/
+.build/
+
+# macOS
+.DS_Store
+
+# 에디터
+.swiftpm/
+*.xcuserstate

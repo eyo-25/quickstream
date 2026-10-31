@@ -73,5 +73,5 @@
 
 ## 관련 검사
 
-- `.github/workflows/ci.yml` 은 모든 푸시·PR 마다 macOS 14, 15, 26 과 Intel 러너에서 셸 문법, Swift 테스트, 빌드, 번들 검사, 실행 확인을 합니다.
+- `.github/workflows/ci.yml` 은 모든 푸시·PR 마다 macOS 15, 26 과 Intel(macos-15-intel) 러너에서 셸 문법, Swift 테스트, 빌드, 번들 검사, 실행 확인을 합니다. macOS 14 러너 이미지는 GitHub 이 2026-11-02 에 종료하므로(그 전에도 brownout 으로 실패) 뺐습니다. 앱의 최소 지원 OS 는 여전히 14.0 이며 `verify-app.sh` 가 빌드 결과의 최소 OS 를 검사합니다.
 - 누구든 `gh attestation verify QuickStream-X.Y.Z.zip -R eyo-25/quickstream --signer-workflow eyo-25/quickstream/.github/workflows/release.yml --source-ref refs/tags/vX.Y.Z` 로 릴리스 zip 을 확인할 수 있습니다([SECURITY.md](../SECURITY.md)).

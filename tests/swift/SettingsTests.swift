@@ -395,7 +395,11 @@ private func recordingPauseAndAppRefresh() {
         let before = catalog.scans
         catalog.list = [InstalledApp(bundleId: "new.app", name: "새 앱", altName: nil, appPath: "/Applications/New.app")]
         model.resetFromStore()
-        RunLoop.main.run(until: Date().addingTimeInterval(0.2))
+        // 재스캔은 백그라운드에서 끝나므로 고정 시간이 아니라 조건이 맞을 때까지(최대 5초) 기다린다. 느린 CI 러너(Intel)에서 0.2초로는 모자랐다.
+        let deadline = Date().addingTimeInterval(5)
+        while Date() < deadline && !(catalog.scans > before && !model.apps.isEmpty) {
+            RunLoop.main.run(until: Date().addingTimeInterval(0.02))
+        }
         checkEqual(catalog.scans, before + 1, "다시 열면 재스캔")
         checkEqual(model.apps.map(\.bundleId), ["new.app"], "새로 설치한 앱이 목록에 나타난다")
     }

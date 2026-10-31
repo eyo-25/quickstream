@@ -6,7 +6,7 @@ cask "quickstream" do
 
   url "https://github.com/eyo-25/quickstream/releases/download/v#{version}/QuickStream-#{version}.zip"
   name "QuickStream"
-  desc "Circular 8-slot app launcher for the macOS menu bar"
+  desc "Circular 8-slot app launcher for the menu bar"
   homepage "https://github.com/eyo-25/quickstream"
 
   livecheck do
@@ -14,22 +14,22 @@ cask "quickstream" do
     strategy :github_latest
   end
 
-  depends_on macos: ">= :sonoma"
+  depends_on macos: :sonoma
 
   app "QuickStream.app"
 
   # 앱은 ad-hoc 서명이고 공증되지 않았다. 설치 직후 Gatekeeper 경고 없이 열리도록 격리 속성을 제거한다.
-  postflight do
-    system_command "/usr/bin/xattr",
-                   args: ["-dr", "com.apple.quarantine", "#{appdir}/QuickStream.app"],
-                   must_succeed: false
+  postflight_steps do
+    run "/usr/bin/xattr",
+        args:         ["-dr", "com.apple.quarantine", "{{appdir}}/QuickStream.app"],
+        must_succeed: false
   end
 
+  # 이전 Electron 판이 쓰던 설정 폴더(퀵스트림·퀘스트림)는 SettingsMigration 이 읽어 가져온다
   zap trash: [
     "~/Library/Application Support/QuickStream",
-    # 이전 Electron 판이 쓰던 설정 폴더(SettingsMigration 이 읽어 가져온다)
-    "~/Library/Application Support/퀵스트림",
     "~/Library/Application Support/퀘스트림",
+    "~/Library/Application Support/퀵스트림",
     "~/Library/Caches/io.github.eyo-25.quickstream",
     "~/Library/HTTPStorages/io.github.eyo-25.quickstream",
     "~/Library/Preferences/io.github.eyo-25.quickstream.plist",

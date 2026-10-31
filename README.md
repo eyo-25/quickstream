@@ -99,10 +99,13 @@ brew --version
 brew install --cask eyo-25/tap/quickstream
 ```
 
-이 한 줄이 tap 추가와 앱 설치를 함께 합니다. `eyo-25/tap/quickstream` 은 `<tap 이름>/<cask 이름>` 이라는 뜻이며, tap 이 이미 추가돼 있지 않으면 자동으로 추가합니다. 두 단계로 나눠 하고 싶다면 아래와 같습니다.
+이 한 줄이 tap 추가와 앱 설치를 함께 합니다. `eyo-25/tap/quickstream` 은 `<tap 이름>/<cask 이름>` 이라는 뜻이며, tap 이 이미 추가돼 있지 않으면 자동으로 추가합니다. Homebrew 7 이상은 공식이 아닌 tap 의 cask 를 **신뢰한 뒤에만** 불러오는데, 위처럼 전체 이름을 직접 적어 설치하면 그 cask 하나가 자동으로 신뢰됩니다(설치 중 `Trusted cask eyo-25/tap/quickstream` 이라고 나옵니다).
+
+두 단계로 나눠 하고 싶다면 tap 을 먼저 추가한 뒤 **직접 신뢰**해야 합니다.
 
 ```sh
 brew tap eyo-25/tap
+brew trust --cask eyo-25/tap/quickstream   # Homebrew 7 이상. brew trust 명령이 없는 이전 버전에서는 건너뜁니다
 brew install --cask quickstream
 ```
 
@@ -124,7 +127,7 @@ open -a QuickStream
 | 설정·로그·캐시까지 완전 삭제 | `brew uninstall --zap --cask quickstream` |
 | 다시 설치 | `brew reinstall --cask quickstream` |
 
-> **참고** — `No Cask with this name exists` 가 나오면 `brew update` 로 tap 을 새로 받은 뒤 다시 시도하세요. 퀵스트림은 tap 을 추가하기 전에는 `brew search quickstream` 에 나오지 않습니다.
+> **참고** — `No Cask with this name exists` 가 나오면 `brew update` 로 tap 을 새로 받은 뒤 다시 시도하세요. 퀵스트림은 tap 을 추가하기 전에는 `brew search quickstream` 에 나오지 않습니다. `Refusing to load cask … from untrusted tap` 이 나오면 `brew trust --cask eyo-25/tap/quickstream` 을 실행한 뒤 다시 시도하세요.
 
 ### 방법 2. zip 직접 받기
 
@@ -457,6 +460,7 @@ zap 은 `~/Library/Application Support/QuickStream`(설정·로그)와 이전 El
 | --- | --- |
 | "열 수 없습니다" 라고 나옴 | **시스템 설정 › 개인정보 보호 및 보안** 에서 **그래도 열기**, 또는 `xattr -dr com.apple.quarantine /Applications/QuickStream.app`. zip 을 직접 받았거나 cask 의 격리 제거 단계가 실패했을 때 생깁니다 |
 | `brew install` 이 `No Cask with this name` 이라고 함 | `brew update` 후 다시 시도하세요. 전체 이름 `eyo-25/tap/quickstream` 으로 설치해야 합니다 |
+| `Refusing to load cask … from untrusted tap` 이라고 함 | Homebrew 7 이상은 신뢰하지 않은 tap 의 cask 를 불러오지 않습니다. `brew trust --cask eyo-25/tap/quickstream` 을 실행한 뒤 다시 시도하세요. 앱 안의 **업데이트** 도 같은 이유로 실패할 수 있으며(`update.log` 에 같은 메시지), 신뢰하면 해결됩니다 |
 | 메뉴바에 아이콘이 안 보임 | 노치가 있는 Mac 은 다른 메뉴바 항목이 가릴 수 있습니다. 일부를 종료하거나, macOS 26 이상은 **시스템 설정 › 메뉴 막대** 를 확인하세요 |
 | ⌥Q 가 반응하지 않거나 다른 앱도 반응함 | 다른 앱과 단축키가 겹친 것입니다. 설정 › 일반에서 조합을 바꾸세요 |
 | 설정이 기본값으로 돌아감 | 메뉴에 표시된 사유를 확인하세요. `settings.json` 이 깨졌다면 파일은 그대로 두고 기본값으로 동작합니다. 설정 창에서 저장하면 깨진 파일이 `.bak` 으로 남습니다 |

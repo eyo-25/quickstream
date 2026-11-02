@@ -9,8 +9,6 @@ struct ActionEditorView: View {
     let allowMacro: Bool
     /// 접근성 레이블 접두("슬롯 3", "단계 2")
     let label: String
-    /// 설치된 앱 선택기로 고른 경우에만 호출된다(슬롯 이름 자동 채움용)
-    var onPickApp: ((InstalledApp) -> Void)?
 
     /// 매크로 단계 행의 안정적인 id(Action 에는 id 가 없다). 이동/삭제/추가 버튼이 같은 동작으로 갱신해 행이 제자리를 따라 움직이게 한다.
     @StateObject private var stepIDs = StepIDs()
@@ -83,7 +81,6 @@ struct ActionEditorView: View {
             block("앱 선택") {
                 AppPickerView(apps: apps, selected: bundleId, label: label) { app in
                     action = SettingsDraft.launchApp(.bundleId, app.bundleId)
-                    onPickApp?(app)
                 }
             }
             OneUIDivider(inset: OneUI.rowInset)

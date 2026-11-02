@@ -148,7 +148,7 @@ private func slotEditing() {
     added = D.addSlot(added, tab: 1)
     let newName = slots(added, 1).last?.name ?? ""
     check(newName.hasPrefix("슬롯 "), "자동 부여된 기본 이름")
-    checkEqual(D.nameForPickedApp(currentName: newName, appName: "계산기"), "계산기", "기본 이름이면 앱 이름으로 채움")
+    checkEqual(D.applyingAction(.launchApp(bundleId: "com.apple.calculator", appPath: nil), to: Slot(id: "n", name: newName, label: nil, action: D.defaultAction(.launchApp)), apps: [calculator()]).name, "Calculator", "새 슬롯에 앱을 고르면 파일 이름으로 채움")
 
     // 라벨
     checkEqual(D.normalizeLabel("  "), nil, "빈 라벨은 nil")
@@ -254,12 +254,28 @@ private func appPicker() {
     check(D.matches(calc, query: ""), "빈 검색어는 전체")
     check(D.matches(InstalledApp(bundleId: "com.x.y", name: "엑스", altName: nil, appPath: "/x.app"), query: "엑"), "altName 이 없어도 검색")
 
-    checkEqual(D.nameForPickedApp(currentName: "", appName: "계산기"), "계산기", "빈 이름은 앱 이름으로 채움")
-    checkEqual(D.nameForPickedApp(currentName: "   ", appName: "계산기"), "계산기", "공백 이름도 채움")
-    checkEqual(D.nameForPickedApp(currentName: "슬롯 3", appName: "계산기"), "계산기", "기본 이름은 채움")
-    checkEqual(D.nameForPickedApp(currentName: "내 계산기", appName: "계산기"), "내 계산기", "사용자 이름은 유지")
-    checkEqual(D.nameForPickedApp(currentName: "슬롯 8 메모", appName: "계산기"), "슬롯 8 메모", "기본 이름처럼 보이는 사용자 이름은 유지")
-    checkEqual(D.nameForPickedApp(currentName: "", appName: String(repeating: "A", count: 60)).count, 40, "이름은 40자 상한")
+    // 앱이 바뀌면 이름·라벨을 파일 이름으로 다시 정한다
+    let base = Slot(id: "s", name: "내 계산기", label: "ZZ", action: D.defaultAction(.launchApp))
+    let picked = D.applyingAction(.launchApp(bundleId: calc.bundleId, appPath: nil), to: base, apps: [calc])
+    checkEqual(picked.name, "Calculator", "고른 앱은 파일 이름으로 이름을 덮어씀")
+    checkEqual(picked.label, "CA", "라벨도 파일 이름에서 만듦")
+    let typed = D.applyingAction(.launchApp(bundleId: nil, appPath: "/Applications/Visual Studio Code.app"), to: base, apps: [])
+    checkEqual(typed.name, "Visual Studio Code", "경로 직접 입력은 파일 이름 사용")
+    checkEqual(typed.label, "VS", "여러 단어는 앞 두 단어 첫 글자")
+    checkEqual(D.applyingAction(.launchApp(bundleId: nil, appPath: "/Applications/Visual Studio Code.app"), to: typed, apps: []), typed, "같은 동작이면 그대로")
+    checkEqual(D.applyingAction(.launchApp(bundleId: nil, appPath: "/Applications/Foo"), to: base, apps: []).name, "내 계산기", ".app 이 아닌 경로는 이름 유지")
+    checkEqual(D.applyingAction(.launchApp(bundleId: "unknown.app", appPath: nil), to: base, apps: [calc]).name, "내 계산기", "목록에 없는 번들 ID 는 이름 유지")
+    checkEqual(D.applyingAction(.openURL("https://a.com"), to: base, apps: [calc]).name, "내 계산기", "앱 동작이 아니면 이름 유지")
+    let longApp = InstalledApp(bundleId: "l", name: "l", altName: nil, appPath: "/Applications/\(String(repeating: "A", count: 60)).app")
+    checkEqual(D.applyingAction(.launchApp(bundleId: "l", appPath: nil), to: base, apps: [longApp]).name.count, 40, "이름은 40자 상한")
+    let emojiApp = InstalledApp(bundleId: "e", name: "e", altName: nil, appPath: "/Applications/🙂🙂Pad.app")
+    let emoji = D.applyingAction(.launchApp(bundleId: "e", appPath: nil), to: base, apps: [emojiApp])
+    checkEqual(emoji.label, nil, "UTF-16 3유닛을 넘는 약어는 라벨을 비움")
+    let nfdName = String(repeating: "\u{1112}\u{1161}\u{11AB}", count: 20)
+    let nfdApp = InstalledApp(bundleId: "n", name: "n", altName: nil, appPath: "/Applications/\(nfdName).app")
+    let nfd = D.applyingAction(.launchApp(bundleId: "n", appPath: nil), to: base, apps: [nfdApp])
+    check(nfd.name.utf16.count <= 40 && !nfd.name.isEmpty, "이름은 UTF-16 40유닛 상한")
+    check(nfd.label == nil, "NFD 한글 약어는 3유닛 초과라 라벨 비움")
 }
 
 private func shortcutRecording() {

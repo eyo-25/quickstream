@@ -351,10 +351,34 @@ enum SettingsDraft {
         return [app.name, app.altName ?? "", app.bundleId].contains { $0.lowercased().contains(q) }
     }
 
-    /// 앱을 골랐을 때의 슬롯 이름: 비었거나 기본 이름("슬롯 N") 그대로면 앱 이름으로 채우고, 사용자가 정한 이름은 유지한다.
-    static func nameForPickedApp(currentName: String, appName: String) -> String {
-        let trimmed = currentName.trimmingCharacters(in: .whitespacesAndNewlines)
-        let isDefault = trimmed.hasPrefix("슬롯 ") && !trimmed.dropFirst(3).isEmpty && trimmed.dropFirst(3).allSatisfy(\.isASCII) && trimmed.dropFirst(3).allSatisfy(\.isNumber)
-        return trimmed.isEmpty || isDefault ? String(appName.prefix(40)) : currentName
+    /// `.app` 경로의 파일 이름(확장자 제외). `.app` 이 아니거나 이름이 비면 nil.
+    static func appFileName(path: String) -> String? {
+        let url = URL(fileURLWithPath: path)
+        guard url.pathExtension.lowercased() == "app" else { return nil }
+        let name = url.deletingPathExtension().lastPathComponent
+        return name.isEmpty ? nil : name
+    }
+
+    /// 앱 실행 동작이 가리키는 앱의 파일 이름. 경로는 그대로, 번들 ID 는 설치된 앱 목록에서 경로를 찾아 얻는다. 못 찾으면 nil.
+    static func appFileName(of action: Action, apps: [InstalledApp]) -> String? {
+        guard case let .launchApp(bundleId, appPath) = action else { return nil }
+        if let appPath { return appFileName(path: appPath) }
+        guard let bundleId, let app = apps.first(where: { $0.bundleId == bundleId }) else { return nil }
+        return appFileName(path: app.appPath)
+    }
+
+    /// 슬롯의 동작을 `newAction` 으로 바꾼다. 앱이 바뀌어 파일 이름을 알 수 있으면 이름(검증기와 같은 UTF-16 40유닛 상한)과 라벨을 그 파일 이름으로 다시 정한다.
+    /// 사용자가 정한 이름·라벨도 덮어쓴다. 파일 이름을 알 수 없는 편집(번들 ID 직접 입력 중, 종류 변경 등)은 이름·라벨을 건드리지 않는다.
+    /// 약어가 검증기 상한(UTF-16 3유닛)을 넘으면(이모지·NFD 한글 등) 라벨은 비워 화면이 이름에서 만들게 한다.
+    static func applyingAction(_ newAction: Action, to slot: Slot, apps: [InstalledApp]) -> Slot {
+        var next = slot
+        next.action = newAction
+        guard newAction != slot.action, let fileName = appFileName(of: newAction, apps: apps) else { return next }
+        var name = fileName
+        while name.utf16.count > 40 { name.removeLast() }
+        next.name = name
+        let initials = slotInitials(fileName)
+        next.label = initials.utf16.count <= 3 ? normalizeLabel(initials) : nil
+        return next
     }
 }

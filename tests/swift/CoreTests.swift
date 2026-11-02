@@ -1009,7 +1009,7 @@ private func testThemeSizesAndBodyDecode() {
         check(loaded != nil, "잘못된 본체/스타일/색(\(bad))에도 파일을 읽는다")
         checkEqual(loaded?.overlay.bodyTheme, OverlaySettings().bodyTheme, "bodyTheme 오류 → 기본(다크 글라스)(\(bad))")
         checkEqual(loaded?.overlay.focusStyle, .neon, "focusStyle 오류 → 네온(기본)(\(bad))")
-        checkEqual(loaded?.overlay.focusHex, FocusColors.defaultHex, "focusHex 오류 → 기본 라벤더(\(bad))")
+        checkEqual(loaded?.overlay.focusHex, FocusColors.defaultHex, "focusHex 오류 → 기본 민트(\(bad))")
         checkEqual(loaded?.overlay.showTileLabels, true, "showTileLabels 오류 → true(\(bad))")
         checkEqual(loaded?.shortcut, "Alt+W", "오류에도 shortcut 유지(\(bad))")
         checkEqual(loaded?.tabs.count, 1, "오류에도 tabs 유지(\(bad))")
@@ -1038,7 +1038,7 @@ private func testThemeSizesAndBodyDecode() {
     checkEqual([defaults?.bodyTheme == .darkGlass, defaults?.focusStyle == .neon, defaults?.focusHex == FocusColors.defaultHex], [true, true, true], "키 없으면 기본값")
     // 새 기본값은 선언부와 디코드 폴백이 항상 같다: 키가 전혀 없는 문서 = 기본 생성자, 그리고 값 자체도 고정한다
     checkEqual(defaults, OverlaySettings(), "키 없는 overlay 는 OverlaySettings() 와 같다")
-    checkEqual(FocusColors.defaultHex, "#A277FF", "기본 포커스 색은 라벤더")
+    checkEqual(FocusColors.defaultHex, "#19F9D8", "기본 포커스 색은 민트")
     let d = OverlaySettings()
     checkEqual([d.alpha, Double(d.radius)], [0.4, 28], "기본 투명도 0.4 · 모서리 28")
     checkEqual(d.theme, .orbit, "기본 테마는 오비트")

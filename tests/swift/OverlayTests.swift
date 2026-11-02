@@ -1049,7 +1049,7 @@ func runOverlayTests() {
               && !style.showNumbers && !style.showTileLabels && style.solidBacking, "미리보기 스타일이 본체·포커스·이름 위치·번호·라벨·바닥판을 읽는다")
         check(style.colors == PaletteColors.make(body: .darkGlass, style: .neon, hex: "#19F9D8", solid: true), "미리보기 합성 색은 오버레이와 같은 함수")
         let defaultStyle = PiePreviewStyle(OverlaySettings())
-        check(defaultStyle.colors == PaletteColors.make(body: .darkGlass, style: .neon, hex: "#A277FF", solid: true), "기본 미리보기 색은 다크 글라스 + 네온 라벤더(바닥판 켬)")
+        check(defaultStyle.colors == PaletteColors.make(body: .darkGlass, style: .neon, hex: "#19F9D8", solid: true), "기본 미리보기 색은 다크 글라스 + 네온 민트(바닥판 켬)")
         // 크기는 테마별로 각자: 미리보기는 현재 테마의 값을 읽는다
         var sizes = OverlaySettings()
         sizes.pieSizes = ThemeSizes(ring: 200, center: 80, border: 5)

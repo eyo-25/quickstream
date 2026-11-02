@@ -446,7 +446,7 @@ func runAll() {
     }
     func orbit(_ edit: (inout OverlaySettings) -> Void = { _ in }) -> OverlaySettings { scene(.orbit, edit) }
     func pie(_ edit: (inout OverlaySettings) -> Void = { _ in }) -> OverlaySettings { scene(.pie, edit) }
-    // 앱 기본 모양(오비트 · 다크 글라스 · 네온 라벤더 · 투명도 0.4 …)에서 테마만 고른다
+    // 앱 기본 모양(오비트 · 다크 글라스 · 네온 민트 · 투명도 0.4 …)에서 테마만 고른다
     func appDefault(_ theme: OverlayTheme) -> OverlaySettings { var o = OverlaySettings(); o.theme = theme; return o }
 
     // 테마 비교: 같은 본체·같은 배경, 테마만 다르다

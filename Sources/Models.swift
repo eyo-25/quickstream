@@ -227,8 +227,8 @@ struct FocusPreset: Equatable {
 
 /// 포커스 색: 팔레트(프리셋)를 제공하고, 사용자가 임의의 색(`#RRGGBB`)을 직접 골라 쓸 수도 있다.
 enum FocusColors {
-    /// 기본 포커스 색(라벤더 프리셋)
-    static let defaultHex = "#A277FF"
+    /// 기본 포커스 색(민트 프리셋)
+    static let defaultHex = "#19F9D8"
 
     /// 널리 쓰는 에디터 팔레트(TablePeek 의 테마 목록 참고)의 강조색을 이름 붙여 모았다.
     static let presets: [FocusPreset] = [

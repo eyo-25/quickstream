@@ -61,7 +61,8 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
     /// AppKit 은 창이 닫히거나 키 창을 잃을 때 resignFirstResponder 를 부르지 않으므로 직접 끝낸다. 모델 호출은 중복 방지용 보루다.
     /// 녹화 중이 아닐 때는 입력 포커스를 지우지 않는다: 오버레이를 닫고 설정 창으로 돌아왔을 때 입력 중이던 필드로 키가 가야 한다.
     private func endRecording() {
-        if model.isRecordingShortcut { window?.makeFirstResponder(nil) }
+        // 단축키 녹화 버튼이든 슬롯·닫기 키 녹화 버튼이든 녹화 중이면 입력 포커스를 지워 버튼의 녹화 표시를 끝낸다
+        if model.isRecordingShortcut || window?.firstResponder is KeyRecorder.RecorderButton { window?.makeFirstResponder(nil) }
         model.setShortcutRecording(false)
     }
 

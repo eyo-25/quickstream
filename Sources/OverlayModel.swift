@@ -237,6 +237,12 @@ final class OverlayModel: ObservableObject {
         if down { pressedSlot = index } else if pressedSlot == index { pressedSlot = nil }
     }
 
+    /// 칸의 타일 배지에 쓸 키 표기(탭의 키 배정). 배정이 없는 칸은 빈 문자열이라 배지를 그리지 않는다.
+    func keyLabel(_ index: Int) -> String {
+        guard let labels = tab?.keymap.keyLabels, labels.indices.contains(index) else { return String(index + 1) }
+        return labels[index]
+    }
+
     func run(_ index: Int) {
         guard let tab, tab.slots.indices.contains(index), tab.slots[index] != nil else { return }
         // 확인 모션은 표시만: onRun 은 바로 부르고, 숨길지는 호출 측이 정한다
@@ -258,7 +264,7 @@ final class OverlayModel: ObservableObject {
     /// 처리한 키면 true(호출 측이 기본 동작을 막는다)
     @discardableResult
     func handleKeyDown(_ event: OverlayKeyEvent) -> Bool {
-        guard tab != nil, let action = overlayKeyAction(event) else { return false }
+        guard let tab, let action = overlayKeyAction(event, closeKeyCodes: state?.closeKeyCodes ?? [KeyCode.q]) else { return false }
         switch action {
         case .close:
             onClose?(true)
@@ -268,11 +274,15 @@ final class OverlayModel: ObservableObject {
             // 꾹 눌러 반복되는 입력은 "한 번 더 누름"이 아니다
             if isRepeat { break }
             // 방향키를 함께 누르면 대각선이 된다. 누른 순서와 상관없이 지금 눌린 키 전체로 위치를 정한다.
-            if let slot = arrows.press(direction, focused: selected) { selected = slot }
+            // 어느 칸인지는 슬롯별로 지정한 방향 배정(`keymap.directions`)을 따른다.
+            let keymap = tab.keymap
+            if let slot = arrows.press(direction, focused: selected, resolve: { held in SlotDirection.held(held).flatMap { keymap.directions[$0] } }) { selected = slot }
         case .run:
             run(selected)
-        case .digit(let index):
-            if tab?.slots[index] != nil { run(index) } else { selected = index } // 빈 슬롯: 선택만 해서 허브에 안내
+        case .key(let keyCode):
+            // 이 탭에서 아무 칸에도 배정되지 않은 키는 처리하지 않는다(기본 동작을 그대로 둔다)
+            guard let index = tab.keymap.keys[keyCode] else { return false }
+            if tab.slots[index] != nil { run(index) } else { selected = index } // 빈 슬롯: 선택만 해서 허브에 안내
         case .swallow:
             break
         }

@@ -31,6 +31,29 @@ struct GeneralPane: View {
                 }
             }
 
+            OneUICard(title: "오버레이") {
+                OneUIRow(
+                    symbol: "xmark.circle", title: "닫기 키",
+                    subtitle: model.closeKeyHint ?? "오버레이를 여는 동안 이 키(영문자·숫자)로 닫습니다. Esc 는 늘 닫고, Delete 로 기본(Q)으로 되돌립니다.",
+                    warnSubtitle: model.closeKeyHint != nil) {
+                    KeyRecorder(
+                        display: SlotKey.display(model.draft.closeKey) + (model.draft.closeKey == "q" ? " (기본)" : ""),
+                        accent: model.palette.swatches.accentText.nsColor,
+                        accessibilityLabel: "닫기 키 녹화. 클릭한 뒤 영문자나 숫자 키를 누르세요",
+                        validate: { SettingsDraft.closeKeyConflict(model.draft, key: $0) },
+                        onChange: { key in
+                            // 기본(Q)으로 되돌리려는데 어느 슬롯이 이미 Q 를 쓰면 막고 이유를 보인다
+                            if key == nil, let reason = SettingsDraft.closeKeyConflict(model.draft, key: "q") {
+                                model.closeKeyHint = "기본 키(Q)로 되돌릴 수 없습니다 — \(reason)"
+                                return
+                            }
+                            model.draft = SettingsDraft.settingCloseKey(model.draft, to: key ?? "q")
+                        },
+                        onHint: { model.closeKeyHint = $0 })
+                        .frame(width: 130, height: 30)
+                }
+            }
+
             OneUICard(title: "시작") {
                 OneUIToggleRow(
                     symbol: "power", title: "로그인 시 자동 시작", subtitle: "서명되지 않은 앱은 macOS 가 거부할 수 있습니다.",

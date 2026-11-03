@@ -855,8 +855,8 @@ struct OverlayView: View {
             tileBody(slot: slot, selected: selected, iconSize: geometry.iconSize)
                 .offset(x: mid.x, y: mid.y)
 
-            if showNumbers {
-                Text("\(index + 1)")
+            if showNumbers, !model.keyLabel(index).isEmpty {
+                Text(model.keyLabel(index))
                     .font(OverlayMetrics.wedgeNumberFont(size: numberSize))
                     .foregroundColor(OverlayMetrics.wedgeNumberColor(selected: selected, palette: palette))
                     .offset(x: numberPoint.x, y: numberPoint.y)

@@ -63,7 +63,8 @@ struct PanelPreviewView: View {
         return FlatPreviewBackdrop(height: height, cornerRadius: cornerRadius) {
             ThemedPreview(
                 theme: theme, slots: slots,
-                icons: PiePreview.icons(for: slots, showIcons: overlay.showIcons, catalog: model.catalog), selected: 0,
+                icons: PiePreview.icons(for: slots, showIcons: overlay.showIcons, catalog: model.catalog),
+                keyLabels: Keymap.build(slots: slots, closeKey: model.draft.closeKey).keyLabels, selected: 0,
                 style: PiePreviewStyle(overlay), maxSize: height, referenceRing: max(overlay.ringSize, PanelPreviewView.minReferenceRing))
         }
         // 미리보기가 자체 탭 제스처로 클릭을 먹지 않게 한다(카드 안에서 쓰일 때 카드 전체가 하나의 버튼이다)

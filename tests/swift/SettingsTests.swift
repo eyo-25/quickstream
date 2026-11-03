@@ -47,6 +47,7 @@ func runSettingsTests() {
     slotEditing()
     actionEditing()
     macroEditing()
+    keyAssignmentEditing()
     dirtyDetection()
     appPicker()
     shortcutRecording()
@@ -272,6 +273,72 @@ private func macroEditing() {
     checkEqual(D.removeStep(two, at: 0), two, "마지막 단계는 삭제 불가")
     checkEqual(D.setStep(two, at: 0, .openURL("https://z.example")).steps, [.openURL("https://z.example")], "단계 값 설정")
     checkEqual(D.Macro(.openURL("https://a.example")), nil, "매크로가 아니면 Macro 로 열 수 없다")
+}
+
+private func keyAssignmentEditing() {
+    section("Settings: 슬롯 키·방향키·닫기 키")
+
+    var s = Settings.defaults
+    s = D.addSlot(D.addSlot(s, tab: 0, at: 0), tab: 0, at: 1)
+    func slotKey(_ x: Settings, _ p: Int) -> String? { x.tabs[0].slots[p]?.key }
+    func slotDirection(_ x: Settings, _ p: Int) -> SlotDirection? { x.tabs[0].slots[p]?.direction }
+
+    checkEqual(slotKey(D.settingSlotKey(s, tab: 0, at: 0, to: "w"), 0), "w", "슬롯 키 지정")
+    checkEqual(slotKey(D.settingSlotKey(s, tab: 0, at: 0, to: "W"), 0), "w", "대문자는 소문자로 저장")
+    checkEqual(D.settingSlotKey(s, tab: 0, at: 0, to: "2"), s, "다른 슬롯의 기본 숫자(2)는 못 쓴다")
+    check(D.slotKeyConflict(s, tab: 0, at: 0, key: "2")?.contains("슬롯 2") == true, "겹치는 슬롯을 알려 준다")
+    checkEqual(D.settingSlotKey(s, tab: 0, at: 0, to: "q"), s, "닫기 키(Q)는 못 쓴다")
+    check(D.slotKeyConflict(s, tab: 0, at: 0, key: "q")?.contains("닫기 키") == true, "닫기 키와 겹침 안내")
+    checkEqual(D.settingSlotKey(s, tab: 0, at: 0, to: "-"), s, "영문자·숫자가 아니면 바꾸지 않는다")
+    check(D.slotKeyConflict(s, tab: 0, at: 0, key: "가") != nil, "한글 문자는 쓸 수 없다")
+    checkEqual(slotKey(D.settingSlotKey(s, tab: 0, at: 0, to: "1"), 0), nil, "자기 기본 숫자와 같으면 저장하지 않는다")
+    let withW = D.settingSlotKey(s, tab: 0, at: 0, to: "w")
+    checkEqual(slotKey(D.settingSlotKey(withW, tab: 0, at: 0, to: nil), 0), nil, "nil 은 기본으로 되돌림")
+    checkEqual(slotKey(D.settingSlotKey(withW, tab: 0, at: 1, to: "w"), 1), nil, "다른 슬롯이 이미 쓰는 지정 키는 못 쓴다")
+    checkEqual(D.settingSlotKey(withW, tab: 0, at: 1, to: "1").tabs[0].slots[1]?.key, "1", "비워 둔 1번 칸의 기본 숫자는 이제 2번 칸이 쓸 수 있다")
+
+    checkEqual(slotDirection(D.settingSlotDirection(s, tab: 0, at: 0, to: .right), 0), .right, "방향 지정")
+    checkEqual(D.settingSlotDirection(s, tab: 0, at: 0, to: .upRight), s, "다른 슬롯의 기본 방향(↗)은 못 쓴다")
+    check(D.slotUsingDirection(s, tab: 0, direction: .upRight, except: 0) == 1, "그 방향을 쓰는 슬롯")
+    checkEqual(slotDirection(D.settingSlotDirection(s, tab: 0, at: 0, to: SlotDirection.off), 0), SlotDirection.off, "방향키로 고르지 않음")
+    checkEqual(slotDirection(D.settingSlotDirection(s, tab: 0, at: 0, to: .up), 0), nil, "링 기본 방향과 같으면 저장하지 않는다")
+    check(D.slotUsingDirection(s, tab: 0, direction: SlotDirection.off, except: 0) == nil, "끈 방향은 겹쳐도 된다")
+
+    checkEqual(D.settingCloseKey(s, to: "x").closeKey, "x", "닫기 키 지정")
+    checkEqual(D.settingCloseKey(s, to: "1"), s, "슬롯이 쓰는 숫자는 닫기 키로 못 쓴다")
+    check(D.closeKeyConflict(s, key: "1")?.contains("슬롯 1") == true, "닫기 키 겹침 안내")
+    checkEqual(D.settingCloseKey(s, to: "ab"), s, "형식이 맞지 않으면 바꾸지 않는다")
+    checkEqual(D.settingCloseKey(s, to: "8").closeKey, "8", "빈 칸의 기본 숫자는 닫기 키로 쓸 수 있다")
+
+    // 기본으로 되돌리는 것도 겹침 검사를 받는다: 되돌린 기본 키·방향을 다른 슬롯이 이미 쓰면 바꾸지 않는다
+    var reset = D.settingSlotKey(D.settingSlotKey(s, tab: 0, at: 0, to: "w"), tab: 0, at: 1, to: "1")
+    checkEqual(slotKey(reset, 1), "1", "1번 칸이 W 로 바뀐 사이 2번 칸이 숫자 1 을 지정")
+    checkEqual(D.settingSlotKey(reset, tab: 0, at: 0, to: nil), reset, "1번 칸을 기본(1)으로 되돌리면 2번 칸의 1 과 겹쳐 되돌리지 않는다")
+    reset = D.settingSlotDirection(D.settingSlotDirection(s, tab: 0, at: 0, to: SlotDirection.off), tab: 0, at: 1, to: .up)
+    checkEqual(D.settingSlotDirection(reset, tab: 0, at: 0, to: nil), reset, "1번 칸을 기본 방향(↑)으로 되돌리면 2번 칸의 ↑ 와 겹쳐 되돌리지 않는다")
+
+    // 복제본은 지정한 키·방향을 이어받지 않는다(겹쳐서 저장이 막히지 않게)
+    let custom = D.settingSlotDirection(D.settingSlotKey(s, tab: 0, at: 0, to: "w"), tab: 0, at: 0, to: .down)
+    let duplicated = D.duplicateSlot(custom, tab: 0, at: 0)
+    checkEqual(duplicated.tabs[0].slots[2]?.key, nil, "복제본은 기본 키")
+    check(duplicated.tabs[0].slots[2]?.direction == nil, "복제본은 기본 방향")
+    check(slotKey(duplicated, 0) == "w" && slotDirection(duplicated, 0) == .down, "원본의 지정은 그대로")
+    checkEqual(SettingsValidator.validate(duplicated).filter { $0.text.contains("키") || $0.text.contains("방향") }.map(\.text), [], "복제해도 키·방향 겹침 오류가 생기지 않는다")
+
+    // 옮긴 슬롯의 지정이 새 자리에서 겹치면 풀린다(손으로 고친 파일처럼 기본과 같은 방향이 저장돼 있는 경우)
+    var handEdited = s
+    handEdited.tabs[0].slots[0]?.direction = .up
+    let swappedAway = D.moveSlot(handEdited, tab: 0, from: 0, to: 1)
+    checkEqual(slotDirection(swappedAway, 1), nil, "1번 슬롯이 2번 칸으로 가면 ↑ 지정이 풀려 새 자리의 기본 방향을 쓴다")
+    checkEqual(SettingsValidator.validate(swappedAway).filter { $0.text.contains("방향") }.map(\.text), [], "맞바꾼 뒤 방향 겹침 오류가 없다")
+
+    // 고쳐진 설정은 검증을 통과한다(새 슬롯의 빈 앱 동작은 사용자가 채워야 하므로 URL 동작을 넣는다)
+    var edited = s
+    for p in 0..<2 { edited = D.updateSlot(edited, tab: 0, at: p) { $0.action = .openURL("https://\(p).example") } }
+    edited = D.settingSlotKey(edited, tab: 0, at: 0, to: "w")
+    edited = D.settingSlotDirection(edited, tab: 0, at: 1, to: .left)
+    edited = D.settingCloseKey(edited, to: "x")
+    checkEqual(SettingsValidator.validate(edited).map(\.text), [], "키 배정을 고친 설정은 유효")
 }
 
 private func dirtyDetection() {

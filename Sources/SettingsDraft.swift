@@ -198,12 +198,35 @@ enum SettingsDraft {
         }
     }
 
+    /// 옮기거나 맞바꾼 슬롯의 지정 키·방향이 새 자리에서 다른 슬롯(또는 닫기 키)과 겹치면 그 지정을 풀어 기본으로 되돌린다.
+    /// (예: ↑ 를 지정한 슬롯이 2번 칸으로 가면, 1번 칸으로 온 슬롯의 기본 ↑ 와 겹친다.) 옮긴 두 칸만 본다.
+    private static func droppingConflicts(_ list: inout [Slot?], positions: [Int], closeKey: String) {
+        for p in positions {
+            guard var slot = list[p] else { continue }
+            let snapshot = list
+            func othersContain(_ test: (Slot, Int) -> Bool) -> Bool {
+                snapshot.enumerated().contains { q, entry in q != p && entry.map { test($0, q) } == true }
+            }
+            if let key = slot.key.flatMap(SlotKey.normalize), key == closeKey || othersContain({ Keymap.effectiveKey($0, position: $1) == key }) {
+                slot.key = nil
+            }
+            if let direction = slot.direction, direction != .off, othersContain({ Keymap.effectiveDirection($0, position: $1) == direction }) {
+                slot.direction = nil
+            }
+            list[p] = slot
+        }
+    }
+
     /// 드래그로 슬롯 옮기기: 빈 칸이면 그 칸으로 옮기고, 찬 칸이면 둘을 맞바꾼다. 출발 칸이 비었거나 같은 칸이면 바꾸지 않는다.
+    /// 옮긴 슬롯의 지정 키·방향이 새 자리에서 겹치면 그 지정은 풀린다.
     static func moveSlot(_ s: Settings, tab tabIndex: Int, from: Int, to: Int) -> Settings {
         guard s.tabs.indices.contains(tabIndex), from != to,
               (0..<Limits.slots).contains(from), (0..<Limits.slots).contains(to),
               !isEmptyCell(s.tabs[tabIndex], from) else { return s }
-        return editCells(s, tabIndex) { list in list.swapAt(from, to) }
+        return editCells(s, tabIndex) { list in
+            list.swapAt(from, to)
+            droppingConflicts(&list, positions: [from, to], closeKey: s.closeKey)
+        }
     }
 
     /// 슬롯 복제본이 들어갈 칸: `position` 다음의 빈 칸(끝까지 가서 없으면 처음부터). 복제할 슬롯이 없거나 빈 칸이 없으면 nil.
@@ -219,6 +242,9 @@ enum SettingsDraft {
         return editCells(s, tabIndex) { list in
             guard var copy = list[position] else { return }
             copy.id = newId("slot", taken: list.compactMap { $0?.id })
+            // 복제본은 키·방향을 이어받지 않는다(같은 탭에서 겹치면 저장이 막힌다). 기본 배정을 따른다.
+            copy.key = nil
+            copy.direction = nil
             list[target] = copy
         }
     }
@@ -229,6 +255,73 @@ enum SettingsDraft {
             body(&slot)
             list[position] = slot
         }
+    }
+
+    // MARK: 키 배정 (슬롯 키·방향키·닫기 키)
+
+    /// 이 탭에서 `key` 를 쓰는 다른 슬롯의 링 위치(지정값과 기본 숫자 모두 본다). 없으면 nil.
+    static func slotUsingKey(_ s: Settings, tab tabIndex: Int, key: String, except position: Int) -> Int? {
+        guard s.tabs.indices.contains(tabIndex) else { return nil }
+        for (p, entry) in cells(s.tabs[tabIndex]).enumerated() where p != position {
+            if let slot = entry, Keymap.effectiveKey(slot, position: p) == key { return p }
+        }
+        return nil
+    }
+
+    /// 이 탭에서 `direction` 을 쓰는 다른 슬롯의 링 위치(지정값과 링 기본 방향 모두 본다). `off` 는 겹쳐도 되므로 항상 nil.
+    static func slotUsingDirection(_ s: Settings, tab tabIndex: Int, direction: SlotDirection, except position: Int) -> Int? {
+        guard direction != .off, s.tabs.indices.contains(tabIndex) else { return nil }
+        for (p, entry) in cells(s.tabs[tabIndex]).enumerated() where p != position {
+            if let slot = entry, Keymap.effectiveDirection(slot, position: p) == direction { return p }
+        }
+        return nil
+    }
+
+    /// 슬롯 키로 `key` 를 못 쓰는 이유(쓸 수 있으면 nil). 영문자·숫자 한 글자가 아니거나, 닫기 키이거나, 같은 탭의 다른 슬롯이 쓰는 키다.
+    static func slotKeyConflict(_ s: Settings, tab tabIndex: Int, at position: Int, key: String) -> String? {
+        guard let normalized = SlotKey.normalize(key) else { return "영문자 또는 숫자 키만 쓸 수 있습니다" }
+        if normalized == s.closeKey { return "닫기 키(\(SlotKey.display(normalized)))와 같습니다" }
+        if let other = slotUsingKey(s, tab: tabIndex, key: normalized, except: position) {
+            return "슬롯 \(other + 1) 이(가) 이미 \(SlotKey.display(normalized)) 키를 씁니다"
+        }
+        return nil
+    }
+
+    /// 닫기 키로 `key` 를 못 쓰는 이유(쓸 수 있으면 nil). 영문자·숫자 한 글자가 아니거나, 어느 탭의 슬롯이 이미 쓰는 키다.
+    static func closeKeyConflict(_ s: Settings, key: String) -> String? {
+        guard let normalized = SlotKey.normalize(key) else { return "영문자 또는 숫자 키만 쓸 수 있습니다" }
+        for tab in s.tabs {
+            for (p, entry) in cells(tab).enumerated() {
+                if let slot = entry, Keymap.effectiveKey(slot, position: p) == normalized {
+                    return "탭 ‘\(tab.name)’ 의 슬롯 \(p + 1) 이(가) 이미 \(SlotKey.display(normalized)) 키를 씁니다"
+                }
+            }
+        }
+        return nil
+    }
+
+    /// 슬롯 키를 정한다. nil(또는 기본 숫자와 같은 키)이면 기본으로 되돌린다. 쓸 수 없는 키면, 기본으로 되돌릴 때도 그 기본 숫자를 다른 곳이 쓰고 있으면 바꾸지 않는다.
+    static func settingSlotKey(_ s: Settings, tab tabIndex: Int, at position: Int, to key: String?) -> Settings {
+        let requested = key ?? SlotKey.defaultKey(position: position)
+        guard slotKeyConflict(s, tab: tabIndex, at: position, key: requested) == nil, let normalized = SlotKey.normalize(requested) else { return s }
+        let stored: String? = normalized == SlotKey.defaultKey(position: position) ? nil : normalized
+        return updateSlot(s, tab: tabIndex, at: position) { $0.key = stored }
+    }
+
+    /// 슬롯의 방향키 배정을 정한다. nil(또는 링 기본 방향과 같은 값)이면 기본으로 되돌린다. 같은 탭의 다른 슬롯이 쓰는 방향이면(기본으로 되돌릴 때도) 바꾸지 않는다.
+    static func settingSlotDirection(_ s: Settings, tab tabIndex: Int, at position: Int, to direction: SlotDirection?) -> Settings {
+        let requested = direction ?? SlotDirection.ring(position)
+        guard slotUsingDirection(s, tab: tabIndex, direction: requested, except: position) == nil else { return s }
+        let stored: SlotDirection? = requested == SlotDirection.ring(position) ? nil : requested
+        return updateSlot(s, tab: tabIndex, at: position) { $0.direction = stored }
+    }
+
+    /// 닫기 키를 정한다. 쓸 수 없는 키면 바꾸지 않는다.
+    static func settingCloseKey(_ s: Settings, to key: String) -> Settings {
+        guard closeKeyConflict(s, key: key) == nil, let normalized = SlotKey.normalize(key) else { return s }
+        var next = s
+        next.closeKey = normalized
+        return next
     }
 
     // MARK: 매크로 단계

@@ -86,6 +86,8 @@ struct TabView: Equatable {
     var caption: String
     /// 길이 항상 8. 빈 슬롯은 nil
     var slots: [SlotView?]
+    /// 이 탭에서 키·방향키가 어느 칸을 고르는지(슬롯별 지정 반영)와 타일 배지에 쓸 키 표기
+    var keymap: TabKeymap = .standard
 }
 
 struct OverlayState: Equatable {
@@ -98,6 +100,8 @@ struct OverlayState: Equatable {
     var centerRadius: Int = 112
     /// 중앙 원 테두리 굵기(pt)
     var centerBorder: Int = 4
+    /// 오버레이를 닫는 키(설정의 닫기 키)의 물리 키코드. Esc 는 늘 닫는다.
+    var closeKeyCodes: Set<UInt16> = [KeyCode.q]
     /// 오버레이 테마
     var theme: OverlayTheme = .pie
     /// 파이 테마의 선택된 앱 이름 표시 위치

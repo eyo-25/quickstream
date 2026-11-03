@@ -21,7 +21,8 @@ enum OverlayKeyAction: Equatable {
     case tab(delta: Int)
     case arrow(ArrowDirection, isRepeat: Bool)
     case run
-    case digit(index: Int)
+    /// 영문자·숫자 키(키패드 숫자 포함): 어느 칸인지는 탭의 키 배정(`TabKeymap`)으로 정한다
+    case key(keyCode: UInt16)
     /// 처리하지 않지만 기본 동작(포커스 이동·경고음)은 막는다
     case swallow
 }
@@ -86,12 +87,13 @@ struct ArrowTracker {
     private var focusedAtStart: Int?
     private var lastSlot: Int?
 
-    /// 눌렀다. 지금 눌린 키 전체로 정한 슬롯을 돌려준다(서로 상쇄되면 nil).
+    /// 눌렀다. 지금 눌린 키 전체로 정한 슬롯을 돌려준다(서로 상쇄되거나 배정이 없으면 nil).
     /// focused 는 지금 포커스된 슬롯이며, 제스처의 첫 키를 누를 때의 값만 판정에 쓰인다.
-    mutating func press(_ direction: ArrowDirection, focused: Int) -> Int? {
+    /// `resolve` 는 눌린 방향키 조합 → 링 위치. 기본은 링 위치의 방향(`slotForArrows`)이고, 슬롯마다 방향을 바꾼 탭은 그 배정을 넘긴다.
+    mutating func press(_ direction: ArrowDirection, focused: Int, resolve: (Set<ArrowDirection>) -> Int? = slotForArrows) -> Int? {
         if held.isEmpty { focusedAtStart = focused }
         held.insert(direction)
-        let slot = slotForArrows(held)
+        let slot = resolve(held)
         if let slot { lastSlot = slot }
         return slot
     }
@@ -113,11 +115,12 @@ struct ArrowTracker {
 }
 
 /// 키 입력 → 동작. 처리할 키가 아니면 nil(기본 동작을 그대로 둔다).
-/// Esc/Enter/Tab/방향키는 수정키와 무관하게, Q·[ ]·숫자는 ⌥⌘⌃ 없이 눌렀을 때만 처리한다(앱 단축키·전역 호출 키와 충돌 방지).
-func overlayKeyAction(_ event: OverlayKeyEvent) -> OverlayKeyAction? {
+/// Esc/Enter/Tab/방향키는 수정키와 무관하게, 닫기 키·[ ]·영문자/숫자 키는 ⌥⌘⌃ 없이 눌렀을 때만 처리한다(앱 단축키·전역 호출 키와 충돌 방지).
+/// `closeKeyCodes` 는 설정의 닫기 키(기본 Q)의 물리 키코드. Esc 는 늘 닫는다.
+func overlayKeyAction(_ event: OverlayKeyEvent, closeKeyCodes: Set<UInt16> = [KeyCode.q]) -> OverlayKeyAction? {
     let plain = !event.option && !event.command && !event.control
 
-    if event.keyCode == KeyCode.escape || (event.keyCode == KeyCode.q && plain) { return .close }
+    if event.keyCode == KeyCode.escape || (closeKeyCodes.contains(event.keyCode) && plain) { return .close }
 
     if plain {
         if event.keyCode == KeyCode.bracketLeft { return .tab(delta: -1) }
@@ -134,8 +137,8 @@ func overlayKeyAction(_ event: OverlayKeyEvent) -> OverlayKeyAction? {
     if event.keyCode == KeyCode.returnKey || event.keyCode == KeyCode.keypadEnter {
         return event.isRepeat ? .swallow : .run
     }
-    if plain, let index = KeyCode.digits.firstIndex(of: event.keyCode) ?? KeyCode.keypadDigits.firstIndex(of: event.keyCode) {
-        return event.isRepeat ? .swallow : .digit(index: index)
+    if plain, SlotKey.character(forKeyCode: event.keyCode) != nil {
+        return event.isRepeat ? .swallow : .key(keyCode: event.keyCode)
     }
 
     return nil

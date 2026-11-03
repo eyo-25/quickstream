@@ -129,6 +129,10 @@ struct Slot: Codable, Equatable, Identifiable {
     /// 타일 약어(1~3자). 없으면 이름에서 자동 생성
     var label: String?
     var action: Action
+    /// 이 슬롯을 실행하는 키(영문자·숫자 한 글자, 소문자). 없으면 링 위치 번호 숫자(1~8)
+    var key: String?
+    /// 이 슬롯을 고르는 방향키 조합. 없으면 링 위치의 방향, `off` 면 방향키로 고르지 않는다.
+    var direction: SlotDirection?
 }
 
 struct Tab: Codable, Equatable, Identifiable {
@@ -453,12 +457,14 @@ struct Settings: Codable, Equatable {
     /// Electron 가속키 문자열("Alt+Q", "Command+Shift+Space"). Accelerator 가 해석한다.
     var shortcut: String = "Alt+Q"
     var launchAtLogin: Bool = false
+    /// 오버레이를 닫는 키(영문자·숫자 한 글자, 소문자). Esc 는 늘 닫는다. 기본 Q.
+    var closeKey: String = "q"
     var overlay = OverlaySettings()
     var tabs: [Tab] = []
 
     init() {}
 
-    private enum Keys: String, CodingKey { case schemaVersion, platform, shortcut, launchAtLogin, overlay, tabs }
+    private enum Keys: String, CodingKey { case schemaVersion, platform, shortcut, launchAtLogin, closeKey, overlay, tabs }
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: Keys.self)
@@ -466,6 +472,7 @@ struct Settings: Codable, Equatable {
         platform = try c.decodeIfPresent(String.self, forKey: .platform) ?? "darwin"
         shortcut = try c.decodeIfPresent(String.self, forKey: .shortcut) ?? "Alt+Q"
         launchAtLogin = try c.decodeIfPresent(Bool.self, forKey: .launchAtLogin) ?? false
+        closeKey = try c.decodeIfPresent(String.self, forKey: .closeKey) ?? "q"
         overlay = try c.decodeIfPresent(OverlaySettings.self, forKey: .overlay) ?? OverlaySettings()
         // 예전 버전이 만든 `recent-apps` 탭은 없어졌으므로 읽을 때 버린다. 그것만 있던 파일은 기본 탭으로 되돌려 탭이 항상 하나 이상 있게 한다.
         let stored = try c.decode([StoredTab].self, forKey: .tabs)

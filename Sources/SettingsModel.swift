@@ -61,6 +61,10 @@ final class SettingsModel: ObservableObject {
     @Published var slotDropTarget: Int?
     /// 단축키 녹화 중 안내 문구
     @Published var recorderHint: String?
+    /// 슬롯 키 녹화 중 안내 문구(쓸 수 없는 키를 눌렀을 때)
+    @Published var slotKeyHint: String?
+    /// 닫기 키 녹화 중 안내 문구
+    @Published var closeKeyHint: String?
     private(set) var isRecordingShortcut = false
     /// 저장이 성공했을 때만 불린다(실패·검증에 막힌 저장·변경 없는 저장에서는 부르지 않는다). 설정 창은 이걸로 스스로 닫는다.
     var onSaved: () -> Void = {}

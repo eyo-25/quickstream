@@ -243,6 +243,8 @@ struct OrbitTile: View {
     var showNumber = true
     /// 아이콘이 뒤늦게 도착할 때 크로스페이드할지(미리보기는 끈다)
     var crossfade = false
+    /// 배지에 쓸 키 표기(대문자). nil 이면 번호(index + 1), 빈 문자열이면 이 칸에는 배지를 그리지 않는다.
+    var keyLabel: String? = nil
 
     var body: some View {
         let side = geometry.tileSide
@@ -275,7 +277,7 @@ struct OrbitTile: View {
             glyph
                 .shadow(color: .black.opacity(0.35), radius: 1.5, y: 1)
 
-            if showNumber {
+            if showNumber, keyLabel != "" {
                 badge
                     .offset(x: geometry.badgeOffset(index: index).x, y: geometry.badgeOffset(index: index).y)
             }
@@ -362,7 +364,7 @@ struct OrbitTile: View {
             shape.fill(Color.black.opacity(PaletteColors.badgeLayers(alpha: alpha).base))
             shape.fill(palette.glassTint.opacity(PaletteColors.badgeLayers(alpha: alpha).tint))
             shape.strokeBorder(OverlayMetrics.glassHairline(palette, selected: false, strength: 0.7), lineWidth: OverlayMetrics.hairlineWidth)
-            Text("\(index + 1)")
+            Text(keyLabel ?? "\(index + 1)")
                 .font(OverlayMetrics.wedgeNumberFont(size: 10))
                 .foregroundColor(palette.ink)
         }
@@ -477,7 +479,8 @@ struct OrbitScene: View {
         let icon = slot.flatMap { model.icons[$0.id] }
         return ZStack {
             OrbitTile(geometry: geometry, index: index, corner: geometry.tileCorner(setting: state.radius), alpha: state.alpha,
-                      selected: selected, hovered: hovered, icon: icon, label: slot?.label, palette: palette, showNumber: state.showNumbers, crossfade: model.appeared)
+                      selected: selected, hovered: hovered, icon: icon, label: slot?.label, palette: palette, showNumber: state.showNumbers, crossfade: model.appeared,
+                      keyLabel: model.keyLabel(index))
                 .scaleEffect(selected ? OrbitMetrics.selectedScale : 1)
                 .animation(Motion.animation(Motion.chewy), value: selected)
                 .scaleEffect(pressed ? OverlayMotion.pressScale : 1)

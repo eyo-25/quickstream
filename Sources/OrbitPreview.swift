@@ -12,11 +12,14 @@ struct OrbitPreview: View {
     let style: PiePreviewStyle
     let metrics: PiePreviewMetrics
     let icons: [NSImage?]
+    /// 링 위치별 키 표기(타일 배지). 비어 있으면 번호
+    let keyLabels: [String]
     var onSelect: ((Int) -> Void)?
     /// 정적 미리보기라 기본은 끔. 시험 렌더만 정지 프레임(`frozen`)을 넣는다.
     var hubPulse: HubPulseSource = .off
 
-    init(slots: [Slot?], icons: [NSImage?] = [], selected: Int, invalid: Set<Int> = [], style: PiePreviewStyle, maxSize: CGFloat, referenceRing: Int, onSelect: ((Int) -> Void)? = nil) {
+    init(slots: [Slot?], icons: [NSImage?] = [], keyLabels: [String] = [], selected: Int, invalid: Set<Int> = [], style: PiePreviewStyle, maxSize: CGFloat, referenceRing: Int, onSelect: ((Int) -> Void)? = nil) {
+        self.keyLabels = keyLabels
         self.icons = (0..<PieGeometry.slots).map { icons.indices.contains($0) ? icons[$0] : nil }
         labels = (0..<PieGeometry.slots).map { i -> String? in slots.indices.contains(i) ? slots[i].map { SettingsDraft.displayLabel($0) } : nil }
         names = (0..<PieGeometry.slots).map { i -> String? in slots.indices.contains(i) ? slots[i]?.name : nil }
@@ -52,7 +55,8 @@ struct OrbitPreview: View {
         let labelAt = geometry.labelCenter(index: index, selected: isSelected)
         return ZStack {
             OrbitTile(geometry: geometry, index: index, corner: geometry.tileCorner(setting: style.cornerSetting), alpha: style.alpha,
-                      selected: isSelected, hovered: false, icon: labels[index] != nil ? icons[index] : nil, label: labels[index], palette: style.colors, showNumber: style.showNumbers)
+                      selected: isSelected, hovered: false, icon: labels[index] != nil ? icons[index] : nil, label: labels[index], palette: style.colors, showNumber: style.showNumbers,
+                      keyLabel: keyLabels.indices.contains(index) ? keyLabels[index] : nil)
                 .scaleEffect(isSelected ? OrbitMetrics.selectedScale : 1)
                 .offset(x: center.x, y: center.y)
 

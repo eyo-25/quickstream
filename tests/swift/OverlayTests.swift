@@ -74,18 +74,92 @@ func runOverlayTests() {
     checkEqual(overlayKeyAction(key(KeyCode.escape, command: true)), .close, "Esc 는 수정키와 무관하게 닫는다")
 
     for i in 0..<8 {
-        checkEqual(overlayKeyAction(key(KeyCode.digits[i])), .digit(index: i), "숫자 \(i + 1)")
-        checkEqual(overlayKeyAction(key(KeyCode.keypadDigits[i])), .digit(index: i), "키패드 숫자 \(i + 1)")
+        checkEqual(overlayKeyAction(key(KeyCode.digits[i])), .key(keyCode: KeyCode.digits[i]), "숫자 \(i + 1) 은 키 동작")
+        checkEqual(overlayKeyAction(key(KeyCode.keypadDigits[i])), .key(keyCode: KeyCode.keypadDigits[i]), "키패드 숫자 \(i + 1)")
     }
-    check(overlayKeyAction(key(25)) == nil, "9 는 무시")
-    check(overlayKeyAction(key(29)) == nil, "0 은 무시")
+    checkEqual(overlayKeyAction(key(25)), .key(keyCode: 25), "9 도 키 동작(어느 칸인지는 키 배정이 정한다)")
+    checkEqual(overlayKeyAction(key(29)), .key(keyCode: 29), "0 도 키 동작")
 
     checkEqual(overlayKeyAction(key(KeyCode.returnKey)), .run, "Enter 는 실행")
     checkEqual(overlayKeyAction(key(KeyCode.keypadEnter)), .run, "키패드 Enter 도 실행")
     checkEqual(overlayKeyAction(key(KeyCode.returnKey, repeat: true)), .swallow, "꾹 누른 Enter 는 실행하지 않는다")
     checkEqual(overlayKeyAction(key(KeyCode.digits[1], repeat: true)), .swallow, "꾹 누른 숫자는 실행하지 않는다")
-    check(overlayKeyAction(key(0)) == nil, "관련 없는 키(A)는 기본 동작을 건드리지 않는다")
+    checkEqual(overlayKeyAction(key(0)), .key(keyCode: 0), "영문자(A)도 슬롯 키가 될 수 있다")
     check(overlayKeyAction(key(49)) == nil, "Space 는 무시")
+
+    section("Overlay keys: 슬롯별 키·방향키·닫기 키 배정")
+    // 닫기 키: 기본은 Q, 바꾸면 그 키가 닫고 Q 는 더는 닫지 않는다. Esc 는 늘 닫는다.
+    let closeX = Set(SlotKey.keyCodes(for: "x"))
+    checkEqual(overlayKeyAction(key(7), closeKeyCodes: closeX), .close, "닫기 키를 X 로 바꾸면 X 가 닫는다")
+    checkEqual(overlayKeyAction(key(KeyCode.q), closeKeyCodes: closeX), .key(keyCode: KeyCode.q), "닫기 키가 아니면 Q 는 슬롯 키 후보")
+    checkEqual(overlayKeyAction(key(KeyCode.escape), closeKeyCodes: closeX), .close, "Esc 는 닫기 키와 무관하게 닫는다")
+    check(overlayKeyAction(key(7, command: true), closeKeyCodes: closeX) == nil, "⌘X 는 닫기 키가 아니다")
+    checkEqual(overlayKeyAction(key(83), closeKeyCodes: Set(SlotKey.keyCodes(for: "1"))), .close, "숫자 닫기 키는 키패드 숫자도 닫는다")
+    checkEqual(SlotKey.normalize("A"), "a", "키는 소문자로 저장")
+    check(SlotKey.normalize("ab") == nil && SlotKey.normalize("") == nil && SlotKey.normalize("-") == nil && SlotKey.normalize("가") == nil, "한 글자 영문자·숫자만 허용")
+    checkEqual(SlotKey.character(forKeyCode: 12), "q", "물리 키코드 12 = Q")
+    checkEqual(SlotKey.character(forKeyCode: 91), "8", "키패드 8")
+
+    // 아무것도 지정하지 않으면 예전 동작 그대로: 숫자 1~8, 링 위치 방향
+    let standard = TabKeymap.standard
+    for i in 0..<8 {
+        checkEqual(standard.keys[KeyCode.digits[i]], i, "기본: 숫자 \(i + 1) → \(i + 1)번 칸")
+        checkEqual(standard.keys[KeyCode.keypadDigits[i]], i, "기본: 키패드 숫자 \(i + 1) → \(i + 1)번 칸")
+        checkEqual(standard.directions[SlotDirection.ring(i)], i, "기본: 링 방향 → \(i + 1)번 칸")
+    }
+    checkEqual(standard.keyLabels, ["1", "2", "3", "4", "5", "6", "7", "8"], "기본 배지 표기")
+    checkEqual(SlotDirection.ring(0), .up, "링 0 = ↑")
+    checkEqual(SlotDirection.held([.up, .right]), .upRight, "↑→ = 오른쪽 위")
+    check(SlotDirection.held([.up, .down]) == nil, "↑↓ 상쇄")
+
+    // 지정한 키·방향이 기본보다 앞선다. 방향을 끈 슬롯은 기본 방향도 내놓는다.
+    func slotAt(_ id: String, key: String? = nil, direction: SlotDirection? = nil) -> Slot {
+        Slot(id: id, name: "앱 \(id)", label: nil, action: .openURL("https://\(id).example"), key: key, direction: direction)
+    }
+    let customSlots: [Slot?] = [slotAt("a", key: "w"), slotAt("b", direction: SlotDirection.off), slotAt("c", direction: .up), nil, nil, nil, nil, nil]
+    let customMap = Keymap.build(slots: customSlots, closeKey: "q")
+    checkEqual(customMap.keys[13], 0, "지정한 W 키는 1번 칸")
+    check(customMap.keys[KeyCode.digits[0]] == nil, "키를 따로 지정한 칸의 기본 숫자(1)는 아무도 가져가지 않는다")
+    checkEqual(customMap.keys[KeyCode.digits[1]], 1, "지정하지 않은 칸은 기본 숫자")
+    checkEqual(customMap.directions[.up], 2, "↑ 를 지정한 3번 칸이 1번 칸의 기본 ↑ 보다 앞선다")
+    check(!customMap.directions.values.contains(0), "방향을 빼앗긴 1번 칸은 방향키 배정이 없다")
+    check(customMap.directions[.upRight] == nil, "방향을 끈 2번 칸은 기본 방향(↗)도 쓰지 않는다")
+    checkEqual(customMap.keyLabels, ["W", "2", "3", "4", "5", "6", "7", "8"], "배지에는 지정한 키가 보인다")
+    let blocked = Keymap.build(slots: customSlots, closeKey: "4")
+    check(blocked.keys[KeyCode.digits[3]] == nil, "닫기 키로 쓰는 숫자는 빈 칸도 가져가지 못한다")
+    checkEqual(blocked.keyLabels[3], "", "키가 없는 칸은 배지 표기도 비어 있다")
+
+    // 오버레이 모델: 키·방향키·닫기 키가 지정한 배정대로 동작한다
+    do {
+        let views: [SlotView?] = (0..<8).map { i in
+            customSlots[i] == nil ? nil : SlotView(id: "s\(i)", name: "앱\(i)", label: "A\(i)", verb: "OPEN", iconPNG: nil)
+        }
+        let state = OverlayState(
+            tabs: [TabView(id: "t", name: "탭", caption: "PINNED", slots: views, keymap: customMap)],
+            activeTab: 0, alpha: 0.74, radius: 40, closeKeyCodes: closeX)
+        let (model, log) = makeModel(state)
+        check(model.handleKeyDown(key(13)), "W 는 처리한 키")
+        checkEqual(log.runs, ["t:0"], "W 는 1번 칸 실행")
+        check(model.handleKeyDown(key(KeyCode.digits[1])), "숫자 2 는 처리한 키")
+        checkEqual(log.runs, ["t:0", "t:1"], "숫자 2 는 2번 칸 실행")
+        check(!model.handleKeyDown(key(KeyCode.digits[0])), "아무 칸에도 배정되지 않은 키(1)는 처리하지 않는다")
+        checkEqual(log.runs.count, 2, "배정 없는 키는 실행하지 않는다")
+        _ = model.handleKeyDown(key(KeyCode.digits[3]))
+        checkEqual(model.selected, 3, "빈 칸의 키는 선택만 한다")
+        checkEqual(log.runs.count, 2, "빈 칸의 키는 실행하지 않는다")
+        model.present(state)
+        _ = model.handleKeyDown(key(KeyCode.up))
+        checkEqual(model.selected, 2, "↑ 는 ↑ 를 지정한 3번 칸을 고른다")
+        check(!model.handleKeyUp(keyCode: KeyCode.up) || log.runs.count == 2, "다른 칸으로 옮겨 가는 ↑ 는 뗄 때 실행하지 않는다")
+        _ = model.handleKeyDown(key(KeyCode.right))
+        checkEqual(model.selected, 2, "배정이 없는 방향(→)은 선택을 바꾸지 않는다")
+        _ = model.handleKeyUp(keyCode: KeyCode.right)
+        checkEqual([model.keyLabel(0), model.keyLabel(1), model.keyLabel(3)], ["W", "2", "4"], "타일 배지 표기")
+        _ = model.handleKeyDown(key(7))
+        checkEqual(log.closes, [true], "닫기 키 X 로 닫힌다")
+        _ = model.handleKeyDown(key(KeyCode.q))
+        checkEqual(log.closes, [true], "닫기 키가 아닌 Q 는 닫지 않는다")
+    }
 
     section("Overlay keys: 방향키 → 슬롯")
     checkEqual(overlayKeyAction(key(KeyCode.up)), .arrow(.up, isRepeat: false), "↑")

@@ -35,6 +35,7 @@ enum SettingsValidator {
         }
         if FocusColors.normalized(settings.overlay.focusHex) == nil { general("포커스 색", Message.invalid) }
         if settings.overlay.slotCount != Limits.slots { general("슬롯 수", Message.invalid) }
+        if SlotKey.normalize(settings.closeKey) != settings.closeKey { general("닫기 키", "영문자 또는 숫자 한 글자(소문자)여야 합니다") }
 
         if settings.tabs.isEmpty { general("탭", Message.tooFewItems) }
         if settings.tabs.count > Limits.maxTabs { general("탭", Message.tooManyItems) }
@@ -54,6 +55,8 @@ enum SettingsValidator {
             if (tab.slots.lastIndex { $0 != nil } ?? -1) >= Limits.slots { tabIssue("슬롯", Message.tooManyItems) }
 
             var slotIds = Set<String>()
+            var keyOwner: [String: Int] = [:]
+            var directionOwner: [SlotDirection: Int] = [:]
             for (slotIndex, slot) in tab.slots.enumerated() {
                 guard let slot else { continue } // 빈 칸
                 let prefix = "\(tabLabel) > 슬롯 \(slotIndex + 1)"
@@ -72,6 +75,24 @@ enum SettingsValidator {
                     slotIssue(["라벨"], label.isEmpty ? Message.empty : Message.tooLong)
                 }
                 if !slotIds.insert(slot.id).inserted { slotIssue(["식별자"], "슬롯 id 중복: \(slot.id)") }
+
+                if let key = slot.key, SlotKey.normalize(key) != key { slotIssue(["키"], "영문자 또는 숫자 한 글자(소문자)여야 합니다") }
+                let key = Keymap.effectiveKey(slot, position: slotIndex)
+                if key == settings.closeKey {
+                    slotIssue(["키"], "닫기 키(\(SlotKey.display(key)))와 같습니다")
+                } else if let other = keyOwner[key] {
+                    slotIssue(["키"], "슬롯 \(other + 1) 과(와) 키가 같습니다: \(SlotKey.display(key))")
+                } else {
+                    keyOwner[key] = slotIndex
+                }
+                let direction = Keymap.effectiveDirection(slot, position: slotIndex)
+                if direction != .off {
+                    if let other = directionOwner[direction] {
+                        slotIssue(["방향키"], "슬롯 \(other + 1) 과(와) 방향이 같습니다: \(direction.label)")
+                    } else {
+                        directionOwner[direction] = slotIndex
+                    }
+                }
 
                 for problem in actionProblems(slot.action, step: nil) { slotIssue(problem.path, problem.message) }
             }

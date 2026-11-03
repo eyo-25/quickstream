@@ -61,7 +61,7 @@ final class Deck: DeckProviding, @unchecked Sendable {
                 if let target = Self.iconTarget(for: slot.action) { iconSlots.append((tabIndex, i, target)) }
             }
             resolvedNow[tab.id] = actions
-            tabs.append(TabView(id: tab.id, name: tab.name, caption: tab.type.caption, slots: views))
+            tabs.append(TabView(id: tab.id, name: tab.name, caption: tab.type.caption, slots: views, keymap: Keymap.build(slots: tab.slots, closeKey: settings.closeKey)))
         }
 
         if settings.overlay.showIcons {
@@ -78,6 +78,7 @@ final class Deck: DeckProviding, @unchecked Sendable {
         lock.withLock { resolved = resolvedNow }
         return OverlayState(tabs: tabs, activeTab: 0, alpha: settings.overlay.alpha, radius: settings.overlay.radius,
                             ringRadius: settings.overlay.ringSize, centerRadius: settings.overlay.centerSize, centerBorder: settings.overlay.centerBorder,
+                            closeKeyCodes: Set(SlotKey.keyCodes(for: settings.closeKey).isEmpty ? [KeyCode.q] : SlotKey.keyCodes(for: settings.closeKey)),
                             theme: settings.overlay.theme,
                             namePlacement: settings.overlay.namePlacement, showNumbers: settings.overlay.showNumbers,
                             bodyTheme: settings.overlay.bodyTheme, focusStyle: settings.overlay.focusStyle, focusHex: settings.overlay.focusHex,

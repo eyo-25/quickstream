@@ -210,6 +210,32 @@ private func testValidator() {
     let gapDup = SettingsValidator.validate(s).first
     checkEqual(gapDup?.text, "탭 \"고정 앱\" > 슬롯 4 > 식별자: 슬롯 id 중복: a", "빈 칸 뒤 슬롯의 번호는 링 위치")
     checkEqual(gapDup?.slotIndex, 3, "빈 칸 뒤 슬롯의 이슈 위치")
+
+    // 슬롯 키·방향키·닫기 키: 형식, 중복, 닫기 키와 겹침
+    func keyed(_ id: String, key: String? = nil, direction: SlotDirection? = nil) -> Slot {
+        Slot(id: id, name: "앱 \(id)", label: nil, action: .openURL("https://\(id).example"), key: key, direction: direction)
+    }
+    func withSlots(_ slots: [Slot?], closeKey: String = "q") -> Settings {
+        var t = settings(slots: slots)
+        t.closeKey = closeKey
+        return t
+    }
+    checkEqual(issues(withSlots([keyed("a", key: "w"), keyed("b", key: "e")])), [], "서로 다른 키는 허용")
+    check(hasIssue(withSlots([keyed("a", key: "w"), keyed("b", key: "w")]), containing: "슬롯 1 과(와) 키가 같습니다"), "같은 탭의 키 중복")
+    check(hasIssue(withSlots([keyed("a", key: "2"), keyed("b")]), containing: "슬롯 1 과(와) 키가 같습니다"), "지정한 키가 다른 칸의 기본 숫자와 겹침")
+    check(hasIssue(withSlots([keyed("a", key: "A")]), containing: "영문자 또는 숫자 한 글자"), "대문자는 저장 형식이 아니다")
+    check(hasIssue(withSlots([keyed("a", key: "ab")]), containing: "영문자 또는 숫자 한 글자"), "두 글자 키 거부")
+    check(hasIssue(withSlots([keyed("a", key: "q")]), containing: "닫기 키(Q)와 같습니다"), "닫기 키와 같은 슬롯 키")
+    check(hasIssue(withSlots([keyed("a"), keyed("b")], closeKey: "2"), containing: "닫기 키(2)와 같습니다"), "닫기 키가 슬롯의 기본 숫자와 겹침")
+    checkEqual(issues(withSlots([keyed("a", key: "z")], closeKey: "2")), [], "빈 칸의 기본 숫자는 닫기 키와 겹쳐도 된다(그 칸은 키가 없을 뿐)")
+    check(hasIssue(withSlots([], closeKey: "ab"), containing: "닫기 키"), "닫기 키 형식 오류")
+    check(hasIssue(withSlots([keyed("a", direction: .right), nil, keyed("c")]), containing: "슬롯 1 과(와) 방향이 같습니다"), "지정한 방향이 다른 칸의 기본 방향과 겹침")
+    checkEqual(issues(withSlots([keyed("a", direction: SlotDirection.off), keyed("b", direction: SlotDirection.off)])), [], "방향을 끈 슬롯끼리는 겹쳐도 된다")
+    let tabJSON = try! JSONEncoder().encode(keyed("a", key: "w", direction: .upRight))
+    let tabText = String(data: tabJSON, encoding: .utf8) ?? ""
+    check(tabText.contains("\"up-right\"") && tabText.contains("\"w\""), "키·방향은 저장 JSON 에 들어간다")
+    checkEqual(try! JSONDecoder().decode(Slot.self, from: tabJSON), keyed("a", key: "w", direction: .upRight), "슬롯 키·방향 저장 왕복")
+    check(!(String(data: try! JSONEncoder().encode(keyed("a")), encoding: .utf8) ?? "").contains("direction"), "지정하지 않은 방향은 저장하지 않는다")
     // 다른 탭이면 같은 슬롯 id 허용
     s = .defaults
     s.tabs[0].slots = [slot("a")]
@@ -340,6 +366,8 @@ private func testActionJSON(_ root: URL) {
         checkEqual(parsed.tabs.map(\.id), ["pinned"], "옛 recent-apps 탭은 읽을 때 버림")
         checkEqual(parsed.tabs[0].slots.count, 3, "옛 형식 슬롯 수")
         checkEqual(parsed.tabs[0].slots[2]?.action, .macroSequence(stopOnError: true, steps: [.launchApp(bundleId: nil, appPath: "/Applications/Safari.app"), .clipboardText("hi")]), "옛 형식 매크로")
+        checkEqual(parsed.closeKey, "q", "닫기 키가 없는 옛 파일은 기본 Q")
+        check(parsed.tabs[0].slots.allSatisfy { $0?.key == nil && $0?.direction == nil }, "키·방향이 없는 옛 슬롯은 기본 배정")
     } else {
         check(false, "옛 형식 JSON 디코드")
     }
@@ -366,7 +394,9 @@ private func testStore(_ root: URL) {
     checkEqual(store.warning, nil, "첫 실행은 경고 없음")
     let text = (try? String(contentsOf: store.fileURL, encoding: .utf8)) ?? ""
     check(text.hasSuffix("}\n"), "끝 개행")
-    check(text.hasPrefix("{\n  \"launchAtLogin\""), "prettyPrinted + sortedKeys")
+    check(text.hasPrefix("{\n  \""), "prettyPrinted(들여쓰기 2칸)")
+    let closeAt = text.range(of: "\"closeKey\"")?.lowerBound, loginAt = text.range(of: "\"launchAtLogin\"")?.lowerBound
+    check(closeAt != nil && loginAt != nil && closeAt! < loginAt!, "sortedKeys(키 이름순)")
     check(!text.contains("\\/"), "슬래시를 이스케이프하지 않음")
 
     // 저장 왕복 + 백업

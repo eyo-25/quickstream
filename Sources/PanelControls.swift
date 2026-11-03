@@ -46,6 +46,7 @@ struct ThemedPreview: View {
     let theme: OverlayTheme
     let slots: [Slot?]
     let icons: [NSImage?]
+    var keyLabels: [String] = []
     let selected: Int
     var invalid: Set<Int> = []
     let style: PiePreviewStyle
@@ -56,9 +57,9 @@ struct ThemedPreview: View {
     var body: some View {
         switch theme {
         case .pie:
-            PiePreview(slots: slots, icons: icons, selected: selected, invalid: invalid, style: style, maxSize: maxSize, referenceRing: referenceRing, onSelect: onSelect)
+            PiePreview(slots: slots, icons: icons, keyLabels: keyLabels, selected: selected, invalid: invalid, style: style, maxSize: maxSize, referenceRing: referenceRing, onSelect: onSelect)
         case .orbit:
-            OrbitPreview(slots: slots, icons: icons, selected: selected, invalid: invalid, style: style, maxSize: maxSize, referenceRing: referenceRing, onSelect: onSelect)
+            OrbitPreview(slots: slots, icons: icons, keyLabels: keyLabels, selected: selected, invalid: invalid, style: style, maxSize: maxSize, referenceRing: referenceRing, onSelect: onSelect)
         }
     }
 }

@@ -172,10 +172,10 @@ func runPageMetadataTests() {
     check(!redirect("https://a.com/", "ftp://b.com/"), "http/https 가 아니면 막는다")
 
     for local in ["127.1", "2130706433", "0x7f.0.0.1", "0177.0.0.1", "localhost.", "foo.local.", "[::ffff:127.0.0.1]", "[::ffff:7f00:1]", "::ffff:10.0.0.1",
-                  "100.64.0.1", "fec0::1", "[::]"] {
+                  "100.64.0.1", "fec0::1", "[::]", "::7f00:1", "64:ff9b::7f00:1", "64:ff9b::a00:1"] {
         check(PageMetadata.isLocalNetworkHost(local), "\(local) 도 로컬 호스트(시스템이 해석하는 표기)")
     }
-    for remote in ["[::ffff:8.8.8.8]", "100.63.0.1", "100.128.0.1", "2001:db8::1", "[2606:4700::1111]", "1.1.1.1"] {
+    for remote in ["[::ffff:8.8.8.8]", "100.63.0.1", "100.128.0.1", "2001:db8::1", "[2606:4700::1111]", "1.1.1.1", "64:ff9b::808:808", "::808:808"] {
         check(!PageMetadata.isLocalNetworkHost(remote), "\(remote) 은 로컬 호스트 아님")
     }
     let withSVG = """

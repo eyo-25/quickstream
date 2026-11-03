@@ -75,7 +75,8 @@ enum PageMetadata {
         if inet_pton(AF_INET6, h, &v6) == 1 {
             let b = withUnsafeBytes(of: v6) { Array($0) }
             if b[0..<10].allSatisfy({ $0 == 0 }) && b[10] == 0xff && b[11] == 0xff { return privateV4(b[12], b[13]) }
-            if b[0..<15].allSatisfy({ $0 == 0 }) { return true } // :: 와 ::1
+            if b[0..<12].allSatisfy({ $0 == 0 }) { return privateV4(b[12], b[13]) } // ::a.b.c.d(IPv4 호환), ::, ::1
+            if b[0] == 0, b[1] == 0x64, b[2] == 0xff, b[3] == 0x9b, b[4..<12].allSatisfy({ $0 == 0 }) { return privateV4(b[12], b[13]) } // NAT64 64:ff9b::/96
             return b[0] & 0xfe == 0xfc || (b[0] == 0xfe && b[1] & 0x80 == 0x80) // fc00::/7, fe80::/10 과 fec0::/10
         }
         var v4 = in_addr()

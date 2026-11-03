@@ -25,14 +25,12 @@ enum Limits {
 }
 
 enum TabKind: String, Codable, Equatable {
-    case recentApps = "recent-apps"
     case pinnedApps = "pinned-apps"
     case custom
 
     /// 오버레이 허브 상단 캡션
     var caption: String {
         switch self {
-        case .recentApps: return "RECENT"
         case .pinnedApps: return "PINNED"
         case .custom: return "CUSTOM"
         }
@@ -41,7 +39,6 @@ enum TabKind: String, Codable, Equatable {
     /// 사용자에게 보이는 종류 이름
     var label: String {
         switch self {
-        case .recentApps: return "최근 앱"
         case .pinnedApps: return "고정 앱"
         case .custom: return "커스텀"
         }
@@ -138,7 +135,7 @@ struct Tab: Codable, Equatable, Identifiable {
     var id: String
     var name: String
     var type: TabKind
-    /// 고정/커스텀 탭의 슬롯(배열 인덱스 = 링 위치, 12시부터 시계 방향, 최대 8). 최근 앱 탭은 항상 빈 배열이고 파일에도 쓰지 않는다.
+    /// 슬롯(배열 인덱스 = 링 위치, 12시부터 시계 방향, 최대 8)
     var slots: [Slot]
 
     init(id: String, name: String, type: TabKind, slots: [Slot] = []) {
@@ -155,7 +152,7 @@ struct Tab: Codable, Equatable, Identifiable {
         id = try c.decode(String.self, forKey: .id)
         name = try c.decode(String.self, forKey: .name)
         type = try c.decode(TabKind.self, forKey: .type)
-        slots = type == .recentApps ? [] : (try c.decodeIfPresent([Slot].self, forKey: .slots) ?? [])
+        slots = try c.decodeIfPresent([Slot].self, forKey: .slots) ?? []
     }
 
     func encode(to encoder: Encoder) throws {
@@ -163,7 +160,7 @@ struct Tab: Codable, Equatable, Identifiable {
         try c.encode(id, forKey: .id)
         try c.encode(name, forKey: .name)
         try c.encode(type, forKey: .type)
-        if type != .recentApps { try c.encode(slots, forKey: .slots) }
+        try c.encode(slots, forKey: .slots)
     }
 }
 
@@ -469,16 +466,28 @@ struct Settings: Codable, Equatable {
         shortcut = try c.decodeIfPresent(String.self, forKey: .shortcut) ?? "Alt+Q"
         launchAtLogin = try c.decodeIfPresent(Bool.self, forKey: .launchAtLogin) ?? false
         overlay = try c.decodeIfPresent(OverlaySettings.self, forKey: .overlay) ?? OverlaySettings()
-        tabs = try c.decode([Tab].self, forKey: .tabs)
+        // 예전 버전이 만든 `recent-apps` 탭은 없어졌으므로 읽을 때 버린다. 그것만 있던 파일은 기본 탭으로 되돌려 탭이 항상 하나 이상 있게 한다.
+        let stored = try c.decode([StoredTab].self, forKey: .tabs)
+        let kept = stored.compactMap(\.tab)
+        tabs = kept.isEmpty && !stored.isEmpty ? Settings.defaults.tabs : kept
     }
 
-    /// 첫 실행 기본값: 고정 앱(비어 있음) → 최근 앱. 커스텀 탭은 사용자가 직접 추가한다.
+    /// 첫 실행 기본값: 비어 있는 고정 앱 탭 하나. 탭은 항상 하나 이상 있어야 한다.
     static var defaults: Settings {
         var s = Settings()
-        s.tabs = [
-            Tab(id: "pinned", name: "고정 앱", type: .pinnedApps, slots: []),
-            Tab(id: "recent", name: "최근 앱", type: .recentApps),
-        ]
+        s.tabs = [Tab(id: "pinned", name: "고정 앱", type: .pinnedApps, slots: [])]
         return s
+    }
+}
+
+/// 저장 파일의 탭 한 칸. 없어진 `recent-apps` 종류는 nil 로 읽고, 그 밖의 오류는 그대로 던져 파일 전체를 실패시킨다.
+private struct StoredTab: Decodable {
+    let tab: Tab?
+
+    private enum Keys: String, CodingKey { case type }
+
+    init(from decoder: Decoder) throws {
+        let kind = try decoder.container(keyedBy: Keys.self).decode(String.self, forKey: .type)
+        tab = kind == "recent-apps" ? nil : try Tab(from: decoder)
     }
 }

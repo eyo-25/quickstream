@@ -55,6 +55,8 @@ final class SettingsModel: ObservableObject {
     @Published private(set) var errorFeedback = 0
     /// 탭 편집 패널에서 고른 슬롯 번호(탭을 바꾸면 처음으로). SwiftUI 의 @State 매크로를 쓰지 않으려고(명령줄 도구만 있는 빌드 환경에는 플러그인이 없다) 화면 상태도 모델이 쥔다.
     @Published var selectedSlot = 0
+    /// 사이드바에서 탭을 끌어 놓을 때 지금 올려 둔 대상 탭 id(놓을 자리 표시선용). 화면 상태라 모델이 쥔다.
+    @Published var tabDropTarget: String?
     /// 단축키 녹화 중 안내 문구
     @Published var recorderHint: String?
     private(set) var isRecordingShortcut = false
@@ -201,6 +203,14 @@ final class SettingsModel: ObservableObject {
         draft = next
         // 지운 자리의 이웃 탭으로 선택을 옮긴다
         selection = .tab(next.tabs[min(i, next.tabs.count - 1)].id)
+    }
+
+    /// 드래그로 탭 순서를 바꾼다: `id` 탭이 `targetId` 탭이 있던 자리로 가고 사이의 탭이 한 칸씩 밀린다. 선택은 id 로 쥐고 있어 그대로 따라간다.
+    func moveTab(id: String, onto targetId: String) {
+        guard id != targetId,
+              let from = draft.tabs.firstIndex(where: { $0.id == id }),
+              let to = draft.tabs.firstIndex(where: { $0.id == targetId }) else { return }
+        draft = SettingsDraft.moveTab(draft, at: from, by: to - from)
     }
 }
 

@@ -1,4 +1,14 @@
 import SwiftUI
+import UniformTypeIdentifiers
+
+/// 사이드바에서 탭 행을 끌 때 싣는 값(탭 id). 글자로 싣지 않아 입력칸 위에 놓아도 글자가 들어가지 않는다.
+struct TabDragItem: Codable, Transferable {
+    let id: String
+
+    static var transferRepresentation: some TransferRepresentation {
+        CodableRepresentation(contentType: .data)
+    }
+}
 
 
 /// 화면 전환 키: 같은 종류의 패널로 돌아와도 키가 같으면 전환하지 않는다
@@ -164,7 +174,6 @@ private struct SettingsSidebar: View {
     private func symbol(for type: TabKind) -> String {
         switch type {
         case .pinnedApps: return "pin"
-        case .recentApps: return "clock.arrow.circlepath"
         case .custom: return "square.grid.2x2"
         }
     }
@@ -193,10 +202,25 @@ private struct SettingsSidebar: View {
                         row(symbol: symbol(for: tab.type), title: tab.name.isEmpty ? "(이름 없음)" : tab.name, detail: tab.type.label, selected: selected, warn: tabHasIssue(i)) {
                             select(.tab(tab.id))
                         }
+                        .draggable(TabDragItem(id: tab.id))
                         if selected {
                             tabTools(index: i, tab: tab)
                                 .transition(.opacity.combined(with: .scale(scale: 0.92, anchor: .topLeading)))
                         }
+                    }
+                    // 놓을 자리 표시: 끌고 온 탭이 이 탭이 있던 자리로 들어간다(위에서 내려오면 아래로, 아래에서 올라오면 위로 밀린다)
+                    .overlay {
+                        if model.tabDropTarget == tab.id {
+                            RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(pal.accentText, lineWidth: 2)
+                        }
+                    }
+                    .dropDestination(for: TabDragItem.self) { items, _ in
+                        model.tabDropTarget = nil
+                        guard let dragged = items.first else { return false }
+                        chewyChange { model.moveTab(id: dragged.id, onto: tab.id) }
+                        return true
+                    } isTargeted: { targeted in
+                        if targeted { model.tabDropTarget = tab.id } else if model.tabDropTarget == tab.id { model.tabDropTarget = nil }
                     }
                     .transition(.scale(scale: 0.88).combined(with: .opacity))
                 }
@@ -228,8 +252,6 @@ private struct SettingsSidebar: View {
         Menu {
             Button("커스텀 탭") { chewyChange { model.addTab(.custom) } }
             Button("고정 앱 탭") { chewyChange { model.addTab(.pinnedApps) } }
-            Button(SettingsDraft.canAddRecentTab(model.draft) ? "최근 앱 탭" : "최근 앱 탭 (이미 있음)") { chewyChange { model.addTab(.recentApps) } }
-                .disabled(!SettingsDraft.canAddRecentTab(model.draft))
         } label: {
             Image(systemName: "plus")
         }
@@ -244,7 +266,7 @@ private struct SettingsSidebar: View {
         HStack(spacing: 6) {
             iconButton("arrow.up", "\(tab.name) 탭 위로 이동", disabled: i == 0) { chewyChange { model.moveSelectedTab(by: -1) } }
             iconButton("arrow.down", "\(tab.name) 탭 아래로 이동", disabled: i == model.draft.tabs.count - 1) { chewyChange { model.moveSelectedTab(by: 1) } }
-            iconButton("plus.square.on.square", "\(tab.name) 탭 복제", disabled: tab.type == .recentApps || !SettingsDraft.canAddTab(model.draft)) {
+            iconButton("plus.square.on.square", "\(tab.name) 탭 복제", disabled: !SettingsDraft.canAddTab(model.draft)) {
                 chewyChange { model.duplicateSelectedTab() }
             }
             iconButton("trash", "\(tab.name) 탭 삭제", disabled: model.draft.tabs.count <= 1, destructive: true) { chewyChange { model.removeSelectedTab() } }

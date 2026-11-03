@@ -40,7 +40,6 @@ enum SettingsValidator {
         if settings.tabs.count > Limits.maxTabs { general("탭", Message.tooManyItems) }
 
         var tabIds = Set<String>()
-        var recentTabs = 0
         for (tabIndex, tab) in settings.tabs.enumerated() {
             let tabLabel = "탭 \"\(tab.name)\""
 
@@ -51,11 +50,6 @@ enum SettingsValidator {
             if !isValidTabId(tab.id) { tabIssue("식별자", "탭 id 는 영문/숫자/-/_ 1~32자") }
             if !(1...20).contains(tab.name.utf16.count) { tabIssue("이름", tab.name.isEmpty ? Message.empty : Message.tooLong) }
             if !tabIds.insert(tab.id).inserted { tabIssue("식별자", "탭 id 중복: \(tab.id)") }
-            if tab.type == .recentApps {
-                recentTabs += 1
-                if recentTabs > 1 { tabIssue("종류", "recent-apps 탭은 하나만 허용됩니다") }
-                continue
-            }
             if tab.slots.count > Limits.slots { tabIssue("슬롯", Message.tooManyItems) }
 
             var slotIds = Set<String>()

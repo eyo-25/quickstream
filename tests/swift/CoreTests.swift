@@ -7,7 +7,6 @@ import Foundation
 /// 호출을 기록하는 가짜 AppCatalog
 private final class FakeCatalog: AppCatalog, @unchecked Sendable {
     var running: [RunningApp] = []
-    var onAppActivated: ((RunningApp) -> Void)?
     private let lock = NSLock()
     private var _calls: [String] = []
     private var _iconRequests: [IconTarget] = []
@@ -19,7 +18,6 @@ private final class FakeCatalog: AppCatalog, @unchecked Sendable {
     var calls: [String] { lock.withLock { _calls } }
     var iconRequests: [IconTarget] { lock.withLock { _iconRequests } }
 
-    func runningApps() -> [RunningApp] { running }
     func frontmostApp() -> RunningApp? { running.first }
 
     func activate(bundleId: String, pid: Int32?) async -> ActionResult {
@@ -96,7 +94,7 @@ private func slot(_ id: String, _ action: Action = .openURL("https://example.com
     Slot(id: id, name: name, label: label, action: action)
 }
 
-/// 고정 앱 탭 하나(+ 최근 앱 탭)를 가진 설정
+/// 고정 앱 탭 하나를 가진 설정
 private func settings(slots: [Slot]) -> Settings {
     var s = Settings.defaults
     s.tabs[0].slots = slots
@@ -107,8 +105,8 @@ private func issues(_ s: Settings) -> [String] { SettingsValidator.validate(s).m
 
 private func hasIssue(_ s: Settings, containing text: String) -> Bool { issues(s).contains { $0.contains(text) } }
 
-private func running(_ id: String, name: String, pid: Int32, launched: TimeInterval? = nil) -> RunningApp {
-    RunningApp(bundleId: id, pid: pid, name: name, appPath: "/Applications/\(name).app", launchedAt: launched.map { Date(timeIntervalSince1970: $0) })
+private func running(_ id: String, name: String, pid: Int32) -> RunningApp {
+    RunningApp(bundleId: id, pid: pid, name: name)
 }
 
 /// Electron 판이 실제로 쓰던 형태(알 수 없는 matchApps 키 포함)
@@ -138,7 +136,7 @@ func runCoreTests() {
     testActionJSON(root)
     testStore(root)
     testMigration(root)
-    testRecentTracker()
+
     runAsync {
         await testActionExecutor()
         await testDeck(root)
@@ -179,11 +177,11 @@ private func testValidator() {
     check(!issues(s).isEmpty, "탭 id 한글 불가")
 
     s = .defaults
-    s.tabs[1].id = s.tabs[0].id
+    s.tabs.append(Tab(id: "pinned", name: "둘째", type: .custom))
     check(hasIssue(s, containing: "탭 id 중복: pinned"), "탭 id 중복")
     s = .defaults
-    s.tabs.append(Tab(id: "r2", name: "최근2", type: .recentApps))
-    check(hasIssue(s, containing: "recent-apps 탭은 하나만 허용됩니다"), "최근 앱 탭 둘 불가")
+    s.tabs = []
+    check(!issues(s).isEmpty, "탭이 하나도 없으면 불가")
     s = .defaults
     s.tabs[0].name = String(repeating: "가", count: 21)
     check(hasIssue(s, containing: "이름: 너무 깁니다"), "탭 이름 21자")
@@ -329,12 +327,19 @@ private func testActionJSON(_ root: URL) {
         }
     }
     if let parsed = try? decoder.decode(Settings.self, from: Data(legacyJSON.utf8)) {
+        checkEqual(parsed.tabs.map(\.id), ["pinned"], "옛 recent-apps 탭은 읽을 때 버림")
         checkEqual(parsed.tabs[0].slots.count, 3, "옛 형식 슬롯 수")
         checkEqual(parsed.tabs[0].slots[2].action, .macroSequence(stopOnError: true, steps: [.launchApp(bundleId: nil, appPath: "/Applications/Safari.app"), .clipboardText("hi")]), "옛 형식 매크로")
-        checkEqual(parsed.tabs[1].type, .recentApps, "recent-apps 탭에 slots 없음")
     } else {
         check(false, "옛 형식 JSON 디코드")
     }
+    // 옛 최근 앱 탭만 있던 파일은 기본 탭으로 되돌려 탭이 항상 하나 이상 있다. 탭이 원래 비어 있던 파일은 그대로(검증이 거부한다).
+    func decodeTabs(_ tabsJSON: String) -> [Tab]? {
+        try? decoder.decode(Settings.self, from: Data(#"{"schemaVersion":4,"platform":"darwin","shortcut":"Alt+Q","overlay":{},"tabs":\#(tabsJSON)}"#.utf8)).tabs
+    }
+    checkEqual(decodeTabs(#"[{"id":"recent","name":"최근 앱","type":"recent-apps"}]"#), Settings.defaults.tabs, "최근 앱 탭만 있던 파일은 기본 탭으로")
+    checkEqual(decodeTabs("[]"), [], "원래 빈 탭 목록은 그대로")
+    check(decodeTabs(#"[{"id":"x","name":"x","type":"nope"}]"#) == nil, "알 수 없는 탭 종류는 여전히 디코드 실패")
 }
 
 // MARK: - SettingsStore
@@ -484,33 +489,6 @@ private func testMigration(_ root: URL) {
     }
 }
 
-// MARK: - 최근 앱
-
-private func testRecentTracker() {
-    section("Core/RecentTracker")
-    let tracker = RecentTracker()
-    let a = running("a", name: "Alpha", pid: 1, launched: 100)
-    let b = running("b", name: "Beta", pid: 2, launched: 200)
-    let c = running("c", name: "Gamma", pid: 3, launched: 50)
-    let d = running("d", name: "Delta", pid: 4)
-
-    checkEqual(tracker.order([a, b, c, d], limit: 8).map(\.bundleId), ["b", "a", "c", "d"], "기록이 없으면 실행 시각 최신순, 시각 없음은 뒤")
-    tracker.noteActivated("c", at: Date(timeIntervalSince1970: 1000))
-    tracker.noteActivated("a", at: Date(timeIntervalSince1970: 2000))
-    checkEqual(tracker.order([a, b, c, d], limit: 8).map(\.bundleId), ["a", "c", "b", "d"], "활성화 기록이 있는 앱이 먼저, 최근순")
-    tracker.noteActivated("c", at: Date(timeIntervalSince1970: 3000))
-    checkEqual(tracker.order([a, b, c, d], limit: 8).map(\.bundleId), ["c", "a", "b", "d"], "다시 활성화하면 맨 앞")
-    checkEqual(tracker.order([a, b, c, d], limit: 2).map(\.bundleId), ["c", "a"], "한도 적용")
-    checkEqual(tracker.order([b], limit: 8).map(\.bundleId), ["b"], "실행 중인 앱만 대상(기록만 있는 앱은 나오지 않음)")
-
-    let dup = running("a", name: "Alpha 2", pid: 99)
-    checkEqual(tracker.order([dup, a], limit: 8).map(\.pid), [99], "bundleId 중복은 앞의 것만")
-
-    let x = running("x", name: "Banana", pid: 5)
-    let y = running("y", name: "Apple", pid: 6)
-    checkEqual(RecentTracker().order([x, y], limit: 8).map(\.name), ["Apple", "Banana"], "시각도 없으면 이름순")
-    checkEqual(tracker.order([], limit: 8), [], "빈 목록")
-}
 
 // MARK: - ActionExecutor
 
@@ -589,34 +567,23 @@ private func testDeck(_ root: URL) async {
         return store
     }
 
-    // 기본값: 빈 고정 탭 + 최근 앱 MRU
+    // 기본값: 빈 고정 탭 하나
     do {
         let catalog = FakeCatalog()
-        catalog.running = [running("a", name: "Alpha Tool", pid: 1, launched: 100), running("b", name: "Beta", pid: 2, launched: 200), running("c", name: "Gamma", pid: 3, launched: 50)]
-        let tracker = RecentTracker()
-        tracker.noteActivated("c", at: Date(timeIntervalSince1970: 1000))
         let store = SettingsStore(directory: root.appendingPathComponent("deck-\(UUID().uuidString)"), legacyAppSupport: nil)
-        let deck = Deck(store: store, catalog: catalog, recent: tracker)
+        let deck = Deck(store: store, catalog: catalog)
         let state = await deck.buildState()
         checkEqual(state.activeTab, 0, "activeTab 0")
-        checkEqual(state.tabs.map(\.caption), ["PINNED", "RECENT"], "캡션")
+        checkEqual(state.tabs.map(\.caption), ["PINNED"], "캡션")
         check(state.tabs.allSatisfy { $0.slots.count == 8 }, "슬롯 배열은 항상 8")
         check(state.tabs[0].slots.allSatisfy { $0 == nil }, "빈 고정 탭은 슬롯 전부 비어 있음")
-        let recent = state.tabs[1].slots
-        checkEqual(recent.compactMap { $0?.id }, ["c", "b", "a"], "최근 앱은 MRU 순")
-        checkEqual(recent[2]?.label, "AT", "최근 앱 약어")
-        checkEqual(recent[0]?.verb, "SWITCH", "최근 앱 동사")
-        check(recent[3...].allSatisfy { $0 == nil }, "남는 칸은 nil")
         checkEqual(state.alpha, OverlaySettings().alpha, "alpha 전달(설정 기본값)")
         checkEqual(state.radius, OverlaySettings().radius, "radius 전달(설정 기본값)")
-        checkEqual(deck.action(tabId: "recent", slotIndex: 0), .activateApp(bundleId: "c", pid: 3), "최근 앱 액션")
-        check(deck.action(tabId: "recent", slotIndex: 5) == nil && deck.action(tabId: "pinned", slotIndex: 0) == nil, "빈 슬롯은 nil")
-        check(deck.action(tabId: "recent", slotIndex: 8) == nil && deck.action(tabId: "recent", slotIndex: -1) == nil, "범위 밖은 nil")
-        let switched = await deck.execute(tabId: "recent", slotIndex: 1)
-        checkEqual(switched, .success, "최근 앱 실행")
-        checkEqual(catalog.calls, ["activate:b:2"], "최근 앱 실행은 activate(pid 포함)")
-        let emptyRun = await deck.execute(tabId: "recent", slotIndex: 6)
+        check(deck.action(tabId: "pinned", slotIndex: 0) == nil, "빈 슬롯은 nil")
+        check(deck.action(tabId: "pinned", slotIndex: 8) == nil && deck.action(tabId: "pinned", slotIndex: -1) == nil, "범위 밖은 nil")
+        let emptyRun = await deck.execute(tabId: "pinned", slotIndex: 6)
         check(!emptyRun.ok, "빈 슬롯 실행은 실패")
+        checkEqual(catalog.calls, [], "빈 슬롯 실행은 아무 것도 호출하지 않음")
     }
 
     // 고정/커스텀 슬롯 매핑: 라벨/약어/동사
@@ -630,14 +597,14 @@ private func testDeck(_ root: URL) async {
         ]
         s.tabs.append(Tab(id: "mine", name: "내 탭", type: .custom, slots: [slot("x", .launchApp(bundleId: nil, appPath: "/Applications/X.app"), name: "Xylophone")]))
         let catalog = FakeCatalog()
-        let deck = Deck(store: makeStore(s), catalog: catalog, recent: RecentTracker())
+        let deck = Deck(store: makeStore(s), catalog: catalog)
         let state = await deck.buildState()
         let pinned = state.tabs[0].slots
         checkEqual(pinned.prefix(4).compactMap { $0?.verb }, ["LAUNCH", "OPEN", "COPY", "RUN"], "동사")
         checkEqual(pinned[0]?.label, "mp", "명시한 라벨 우선")
         checkEqual(pinned[1]?.label, "웹", "라벨이 없으면 약어 생성")
-        checkEqual(state.tabs[2].caption, "CUSTOM", "커스텀 캡션")
-        checkEqual(state.tabs[2].slots[0]?.label, "XY", "한 단어 이름 약어")
+        checkEqual(state.tabs[1].caption, "CUSTOM", "커스텀 캡션")
+        checkEqual(state.tabs[1].slots[0]?.label, "XY", "한 단어 이름 약어")
         checkEqual(deck.action(tabId: "mine", slotIndex: 0), .launchApp(bundleId: nil, appPath: "/Applications/X.app"), "커스텀 탭 액션")
         let launched = await deck.execute(tabId: "pinned", slotIndex: 0)
         checkEqual(launched, .success, "고정 슬롯 실행")
@@ -654,7 +621,6 @@ private func testDeck(_ root: URL) async {
             slot("u", .openURL("https://a.com")),
         ]
         let catalog = FakeCatalog()
-        catalog.running = [running("r", name: "Runner", pid: 9)]
         let gate = DispatchSemaphore(value: 0)
         catalog.iconHook = { target in
             _ = gate.wait(timeout: .now() + 10) // 풀어 주기 전까지 아이콘 렌더가 끝나지 않는다
@@ -662,7 +628,8 @@ private func testDeck(_ root: URL) async {
             if case let .appPath(path) = target { return Data("png:\(path)".utf8) }
             return nil
         }
-        let deck = Deck(store: makeStore(s), catalog: catalog, recent: RecentTracker())
+        let store = makeStore(s)
+        let deck = Deck(store: store, catalog: catalog)
         let first = await deck.buildState() // 렌더가 막혀 있어도 돌아와야 한다(막히면 10초 뒤에야 돌아와 아래 검사가 실패한다)
         check(first.tabs.flatMap { $0.slots }.allSatisfy { $0?.iconPNG == nil }, "아이콘이 없어도 buildState 는 기다리지 않고 약어로 표시")
         for _ in 0..<10 { gate.signal() }
@@ -673,7 +640,6 @@ private func testDeck(_ root: URL) async {
         checkEqual(second.tabs[0].slots[1]?.iconPNG, Data("png:/Applications/P.app".utf8), "launch appPath 아이콘")
         checkEqual(second.tabs[0].slots[2]?.iconPNG, nil, "매크로 슬롯은 아이콘 없음")
         checkEqual(second.tabs[0].slots[3]?.iconPNG, nil, "URL 슬롯은 아이콘 없음")
-        checkEqual(second.tabs[1].slots[0]?.iconPNG, Data("png:r".utf8), "최근 앱 아이콘")
         check(!catalog.iconRequests.contains(.bundleId("macro.step")), "매크로 단계는 아이콘을 요청하지 않음")
 
         let requested = catalog.iconRequests.count
@@ -683,10 +649,13 @@ private func testDeck(_ root: URL) async {
         checkEqual(catalog.iconRequests.count, requested, "캐시된 아이콘은 다시 요청하지 않음")
         checkEqual(Set(catalog.iconRequests).count, catalog.iconRequests.count, "같은 대상을 중복 요청하지 않음")
 
-        // prewarm 은 새 앱 아이콘을 미리 채운다
-        deck.prewarm(apps: [running("later", name: "Later", pid: 10)])
+        // prewarm 은 설정에 새로 생긴 앱의 아이콘을 미리 채운다
+        var s2 = s
+        s2.tabs[0].slots.append(slot("later", .launchApp(bundleId: "later", appPath: nil)))
+        check(store.save(s2).ok, "슬롯 추가 저장")
+        deck.prewarm()
         await deck.waitForIconWork()
-        check(catalog.iconRequests.contains(.bundleId("later")), "prewarm 이 활성화된 앱 아이콘을 요청")
+        check(catalog.iconRequests.contains(.bundleId("later")), "prewarm 이 설정의 새 앱 아이콘을 요청")
     }
 
     // 아이콘 표시를 끄면 요청하지 않는다
@@ -695,9 +664,8 @@ private func testDeck(_ root: URL) async {
         s.overlay.showIcons = false
         s.tabs[0].slots = [slot("n", .launchApp(bundleId: "com.apple.Notes", appPath: nil))]
         let catalog = FakeCatalog()
-        catalog.running = [running("r", name: "Runner", pid: 9)]
-        let deck = Deck(store: makeStore(s), catalog: catalog, recent: RecentTracker())
-        deck.prewarm(apps: catalog.running)
+        let deck = Deck(store: makeStore(s), catalog: catalog)
+        deck.prewarm()
         let state = await deck.buildState()
         await deck.waitForIconWork()
         checkEqual(catalog.iconRequests, [], "showIcons=false 면 아이콘을 요청하지 않음")
@@ -710,7 +678,7 @@ private func testDeck(_ root: URL) async {
         s1.tabs[0].slots = [slot("a", .clipboardText("첫번째"))]
         let store = makeStore(s1)
         let fx = Effects()
-        let deck = Deck(store: store, catalog: FakeCatalog(), recent: RecentTracker(), openURL: { fx.opened.append($0) }, writeClipboard: { fx.clipboard.append($0) })
+        let deck = Deck(store: store, catalog: FakeCatalog(), openURL: { fx.opened.append($0) }, writeClipboard: { fx.clipboard.append($0) })
         _ = await deck.buildState()
 
         var s2 = s1

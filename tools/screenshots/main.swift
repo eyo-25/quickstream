@@ -4,7 +4,7 @@ import SwiftUI
 // README 용 스크린샷 생성기. 화면·창을 캡처하지 않고, 앱의 실제 SwiftUI 뷰를 오프스크린으로 그려 PNG 로 쓴다.
 //  - 오버레이: OverlayView(+OrbitScene) 에 OverlayModel/OverlayState 를 직접 주입해 ImageRenderer 로 그린다.
 //  - 설정 창: SettingsRootView 를 화면에 올리지 않은 NSHostingView 로 그려(AppKit 컨트롤이 정상 렌더되도록) 창 틀 위에 합성한다.
-// 모든 슬롯·탭·이름은 아래 데모 데이터다. 사용자 설정 파일·최근 앱·클립보드는 읽지 않는다.
+// 모든 슬롯·탭·이름은 아래 데모 데이터다. 사용자 설정 파일·클립보드는 읽지 않는다.
 // 사용법: qs-shots <출력 폴더> <Info.plist 경로>
 
 // MARK: - 데모 데이터
@@ -84,9 +84,7 @@ final class DemoStore: SettingsStoring {
 
 /// 실제 앱을 실행·조회하지 않는 카탈로그. 아이콘은 시스템 번들에서만 읽는다.
 final class DemoCatalog: AppCatalog {
-    var onAppActivated: ((RunningApp) -> Void)?
     private var cache: [String: Data] = [:]
-    func runningApps() -> [RunningApp] { [] }
     func frontmostApp() -> RunningApp? { nil }
     func activate(bundleId: String, pid: Int32?) async -> ActionResult { .success }
     func refocus(bundleId: String, pid: Int32?) -> Bool { false }
@@ -113,10 +111,7 @@ func overlayState(_ o: OverlaySettings, selected: Int = 0) -> OverlayState {
     let slotViews: [SlotView?] = demoApps.map { app in
         SlotView(id: app.id, name: app.name, label: slotInitials(app.name), verb: "LAUNCH", iconPNG: demoIconPNG(app, pixels: 160))
     }
-    let tabs = [
-        TabView(id: "pinned", name: "고정 앱", caption: "PINNED", slots: slotViews),
-        TabView(id: "recent", name: "최근 앱", caption: "RECENT", slots: slotViews.reversed()),
-    ]
+    let tabs = [TabView(id: "pinned", name: "고정 앱", caption: "PINNED", slots: slotViews)]
     return OverlayState(tabs: tabs, activeTab: 0, alpha: o.alpha, radius: o.radius,
                         ringRadius: o.ringSize, centerRadius: o.centerSize, centerBorder: o.centerBorder,
                         theme: o.theme, namePlacement: o.namePlacement, showNumbers: o.showNumbers,

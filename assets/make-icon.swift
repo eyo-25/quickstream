@@ -3,7 +3,7 @@ import Foundation
 import ImageIO
 import UniformTypeIdentifiers
 
-// 앱 아이콘 생성: 앱의 기본 모양(오비트 · 다크 글라스 · 네온 라벤더)을 CoreGraphics 로 직접 그린다(브라우저·Electron 불필요).
+// 앱 아이콘 생성: 오비트 · 다크 글라스 · 네온 라벤더 모양을 CoreGraphics 로 직접 그린다(브라우저·Electron 불필요). 아이콘 색은 앱의 기본 포커스 색(민트)과 별개다.
 // 사용: swift make-icon.swift <출력 .iconset 폴더>   — make-icon.sh 가 iconutil 로 icns 까지 만든다.
 // 기하: 1024 캔버스, 824px 둥근 사각형, 반지름 262 궤도 위 92px 유리 타일 8개(12시가 선택), 가운데 원판.
 
@@ -19,7 +19,7 @@ func roundedRect(_ rect: CGRect, _ radius: CGFloat) -> CGPath {
 /// CoreGraphics 의 그림자 블러는 CTM 배율의 영향을 받지 않는 장치 픽셀 단위라, 작은 크기에서 번짐이 과해지지 않도록 직접 곱해 준다.
 func draw(_ ctx: CGContext, scale: CGFloat) {
     let space = CGColorSpace(name: CGColorSpace.sRGB)!
-    let lavender: UInt32 = 0xa277ff      // 앱 기본 포커스 색
+    let lavender: UInt32 = 0xa277ff      // 아이콘 강조색(앱 기본 포커스 색과는 별개)
     let lavenderLight: UInt32 = 0xd2bfff // 같은 색을 흰색 쪽으로 밝힌 선(헤어라인)
     let panel = roundedRect(CGRect(x: 100, y: 100, width: 824, height: 824), 185)
 

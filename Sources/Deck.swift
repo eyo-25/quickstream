@@ -1,6 +1,6 @@
 import Foundation
 
-/// 설정(탭/슬롯) + 런타임 데이터(최근 앱, 아이콘)를 화면용 OverlayState 로 풀고, 슬롯을 실행한다.
+/// 설정(탭/슬롯) + 런타임 데이터(아이콘)를 화면용 OverlayState 로 풀고, 슬롯을 실행한다.
 /// 실행할 Action 본문은 여기에만 두고 오버레이는 (tabId, slotIndex) 만 돌려보낸다.
 final class Deck: DeckProviding, @unchecked Sendable {
     private static let iconPixels = 80
@@ -8,7 +8,6 @@ final class Deck: DeckProviding, @unchecked Sendable {
 
     private let store: SettingsStoring
     private let catalog: AppCatalog
-    private let recent: RecentTracker
     private let openURL: (URL) async throws -> Void
     private let writeClipboard: (String) -> Void
 
@@ -25,13 +24,11 @@ final class Deck: DeckProviding, @unchecked Sendable {
     init(
         store: SettingsStoring,
         catalog: AppCatalog,
-        recent: RecentTracker,
         openURL: @escaping (URL) async throws -> Void = ActionExecutor.systemOpenURL,
         writeClipboard: @escaping (String) -> Void = ActionExecutor.systemWriteClipboard
     ) {
         self.store = store
         self.catalog = catalog
-        self.recent = recent
         self.openURL = openURL
         self.writeClipboard = writeClipboard
     }
@@ -57,20 +54,10 @@ final class Deck: DeckProviding, @unchecked Sendable {
             var views = [SlotView?](repeating: nil, count: Limits.slots)
             var actions = [Action?](repeating: nil, count: Limits.slots)
 
-            if tab.type == .recentApps {
-                let apps = recent.order(catalog.runningApps(), limit: Limits.slots)
-                for (i, app) in apps.enumerated() {
-                    let action = Action.activateApp(bundleId: app.bundleId, pid: app.pid)
-                    actions[i] = action
-                    views[i] = SlotView(id: app.bundleId, name: app.name, label: slotInitials(app.name), verb: action.verb)
-                    iconSlots.append((tabIndex, i, .bundleId(app.bundleId)))
-                }
-            } else {
-                for (i, slot) in tab.slots.prefix(Limits.slots).enumerated() {
-                    actions[i] = slot.action
-                    views[i] = SlotView(id: slot.id, name: slot.name, label: slot.label ?? slotInitials(slot.name), verb: slot.action.verb)
-                    if let target = Self.iconTarget(for: slot.action) { iconSlots.append((tabIndex, i, target)) }
-                }
+            for (i, slot) in tab.slots.prefix(Limits.slots).enumerated() {
+                actions[i] = slot.action
+                views[i] = SlotView(id: slot.id, name: slot.name, label: slot.label ?? slotInitials(slot.name), verb: slot.action.verb)
+                if let target = Self.iconTarget(for: slot.action) { iconSlots.append((tabIndex, i, target)) }
             }
             resolvedNow[tab.id] = actions
             tabs.append(TabView(id: tab.id, name: tab.name, caption: tab.type.caption, slots: views))
@@ -98,17 +85,11 @@ final class Deck: DeckProviding, @unchecked Sendable {
                             glassTintHex: settings.overlay.glassTintHex, focusGlow: settings.overlay.focusGlow)
     }
 
-    /// 아이콘 캐시를 미리 채운다(표시를 막지 않는다). 설정의 고정/커스텀 슬롯을 먼저, 이어서 실행 중·새로 활성화된 앱을 데운다.
-    /// 아이콘 작업은 직렬 큐 하나라, 첫 탭에 보이는 슬롯이 실행 중 앱 수십 개 뒤에 줄 서지 않게 슬롯 대상을 앞에 둔다.
-    func prewarm(apps: [RunningApp]) {
+    /// 아이콘 캐시를 미리 채운다(표시를 막지 않는다). 설정의 슬롯 대상 앱 아이콘을 받아 둔다.
+    func prewarm() {
         let settings = store.current
         guard settings.overlay.showIcons else { return }
-        var targets: [IconTarget] = []
-        for tab in settings.tabs where tab.type != .recentApps {
-            targets += tab.slots.compactMap { Self.iconTarget(for: $0.action) }
-        }
-        targets += apps.map { IconTarget.bundleId($0.bundleId) }
-        fetchIcons(targets)
+        fetchIcons(settings.tabs.flatMap { $0.slots.compactMap { Self.iconTarget(for: $0.action) } })
     }
 
     /// 지금까지 요청한 아이콘 작업이 모두 끝날 때까지 기다린다(종료 정리와 테스트용)

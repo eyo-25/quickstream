@@ -6,12 +6,12 @@ import Foundation
 
 private typealias D = SettingsDraft
 
-/// 최근 앱 + 고정 앱(8칸 가득) + 커스텀(5칸) 탭을 가진 픽스처
+/// 빈 커스텀 + 고정 앱(8칸 가득) + 커스텀(5칸) 탭을 가진 픽스처
 private func fixture() -> Settings {
     func slot(_ id: String, _ name: String, _ action: Action) -> Slot { Slot(id: id, name: name, label: nil, action: action) }
     var s = Settings()
     s.tabs = [
-        Tab(id: "recent", name: "최근 앱", type: .recentApps),
+        Tab(id: "extra", name: "추가 탭", type: .custom),
         Tab(id: "pinned", name: "고정 앱", type: .pinnedApps,
             slots: (1...8).map { slot("p\($0)", "앱 \($0)", .launchApp(bundleId: "com.example.app\($0)", appPath: nil)) }),
         Tab(id: "meeting", name: "회의용 퀵", type: .custom,
@@ -75,11 +75,6 @@ private func tabEditing() {
     check(D.addTab(D.addTab(Settings.defaults, .custom), .pinnedApps).tabs.last?.slots.isEmpty == true, "새 탭은 슬롯 없이 시작")
 
     let base = fixture()
-    check(!D.canAddRecentTab(base), "최근 앱 탭이 있으면 추가 불가")
-    checkEqual(D.addTab(base, .recentApps), base, "최근 앱 중복 추가는 변화 없음")
-    let without = D.removeTab(base, at: 0)
-    check(D.canAddRecentTab(without), "삭제하면 다시 추가 가능")
-    checkEqual(D.addTab(without, .recentApps).tabs.last?.type, .recentApps, "최근 앱 탭 추가")
 
     var one = base
     while one.tabs.count > 1 { one = D.removeTab(one, at: 0) }
@@ -89,7 +84,7 @@ private func tabEditing() {
     let ids = base.tabs.map(\.id)
     checkEqual(D.moveTab(base, at: 0, by: -1).tabs.map(\.id), ids, "맨 위 탭을 위로 이동해도 변화 없음")
     checkEqual(D.moveTab(base, at: 2, by: 1).tabs.map(\.id), ids, "맨 아래 탭을 아래로 이동해도 변화 없음")
-    checkEqual(D.moveTab(base, at: 0, by: 1).tabs.map(\.id), ["pinned", "recent", "meeting"], "안쪽 이동은 자리를 바꾼다")
+    checkEqual(D.moveTab(base, at: 0, by: 1).tabs.map(\.id), ["pinned", "extra", "meeting"], "안쪽 이동은 자리를 바꾼다")
 
     let dup = D.duplicateTab(base, at: 2)
     checkEqual(dup.tabs.count, 4, "복제는 탭을 하나 늘린다")
@@ -103,15 +98,46 @@ private func tabEditing() {
     long.tabs[2].name = String(repeating: "가", count: 20)
     checkEqual(D.duplicateTab(long, at: 2).tabs[3].name.count, 20, "복제 이름은 20자 상한")
 
-    checkEqual(D.duplicateTab(base, at: 0), base, "최근 앱 탭은 복제 불가")
     var full = base
     while full.tabs.count < 8 { full = D.addTab(full, .custom) }
     checkEqual(D.duplicateTab(full, at: 1), full, "탭이 가득 차면 복제 불가")
 
     let defaults = Settings.defaults
-    let swapped = D.moveTab(defaults, at: 0, by: 1)
-    checkEqual(swapped.tabs.map(\.id), ["recent", "pinned"], "기본 두 탭의 순서를 바꿀 수 있다")
+    checkEqual(defaults.tabs.map(\.type), [.pinnedApps], "기본 설정은 고정 앱 탭 하나")
+    checkEqual(D.removeTab(defaults, at: 0), defaults, "기본 탭도 마지막 하나라 삭제 불가")
+    checkEqual(D.moveTab(defaults, at: 0, by: 1), defaults, "탭이 하나면 이동은 변화 없음")
     checkEqual(D.renameTab(base, at: 1, "새 이름").tabs[1].name, "새 이름", "탭 이름 변경")
+
+    // 사이드바 드래그: 끈 탭이 놓은 탭의 자리로 가고 선택은 그대로 따라간다
+    MainActor.assumeIsolated {
+        let model = SettingsModel(store: FeedbackStore(), catalog: FeedbackCatalog(), save: { _ in .success }, checkForUpdates: {}, versionText: { "t" })
+        model.draft = fixture()
+        model.selection = .tab("meeting")
+        model.moveTab(id: "meeting", onto: "extra")
+        checkEqual(model.draft.tabs.map(\.id), ["meeting", "extra", "pinned"], "아래 탭을 위 탭에 놓으면 그 자리로 간다")
+        checkEqual(model.tabIndex, 0, "선택된 탭은 새 자리를 따라간다")
+        model.moveTab(id: "meeting", onto: "pinned")
+        checkEqual(model.draft.tabs.map(\.id), ["extra", "pinned", "meeting"], "위 탭을 아래 탭에 놓으면 그 자리로 가고 사이가 밀린다")
+        let before = model.draft
+        model.moveTab(id: "extra", onto: "extra")
+        model.moveTab(id: "없는 탭", onto: "pinned")
+        model.moveTab(id: "pinned", onto: "없는 탭")
+        checkEqual(model.draft, before, "같은 탭·없는 탭은 순서를 바꾸지 않는다")
+    }
+
+    // 마지막 자리의 선택된 탭을 지우면 이웃 탭이 선택되고, 하나 남으면 더 지울 수 없다
+    MainActor.assumeIsolated {
+        let model = SettingsModel(store: FeedbackStore(), catalog: FeedbackCatalog(), save: { _ in .success }, checkForUpdates: {}, versionText: { "t" })
+        model.draft = fixture()
+        model.selection = .tab("meeting")
+        model.removeSelectedTab()
+        checkEqual(model.draft.tabs.map(\.id), ["extra", "pinned"], "마지막 탭 삭제")
+        checkEqual(model.selection, .tab("pinned"), "지운 자리의 이웃 탭이 선택된다")
+        model.removeSelectedTab()
+        checkEqual(model.selection, .tab("extra"), "다시 이웃 탭 선택")
+        model.removeSelectedTab()
+        checkEqual(model.draft.tabs.map(\.id), ["extra"], "마지막 하나는 지울 수 없다")
+    }
 }
 
 private func slotEditing() {
@@ -128,8 +154,6 @@ private func slotEditing() {
     check(!D.canAddSlot(s, tab: t), "가득 차면 추가 불가")
 
     let base = fixture()
-    checkEqual(D.addSlot(base, tab: 0), base, "최근 앱 탭에는 슬롯 추가 불가")
-    check(!D.canAddSlot(base, tab: 0), "최근 앱 탭 canAddSlot=false")
 
     let names = slots(base, 1).map(\.name)
     checkEqual(slots(D.moveSlot(base, tab: 1, at: 0, by: -1), 1).map(\.name), names, "첫 슬롯 위로 이동은 무시")
@@ -163,7 +187,6 @@ private func slotEditing() {
 
     let updated = D.updateSlot(base, tab: 1, at: 0) { $0.name = "다른 이름" }
     checkEqual(slots(updated, 1)[0].name, "다른 이름", "슬롯 갱신")
-    checkEqual(D.updateSlot(base, tab: 0, at: 0) { $0.name = "x" }, base, "최근 앱 탭 슬롯 갱신은 무시")
 }
 
 private func actionEditing() {
@@ -222,9 +245,6 @@ private func dirtyDetection() {
     check(D.isDirty(baseline: s, draft: D.addTab(s, .custom)), "탭 추가는 변경")
 
     // 파일로 저장했다 읽은 값(정규화)과 편집 중 값이 표현만 다르면 변경이 아니다
-    var recentWithSlots = s
-    recentWithSlots.tabs[0].slots = [Slot(id: "x", name: "x", label: nil, action: .openURL("https://x.example"))]
-    check(!D.isDirty(baseline: s, draft: recentWithSlots), "최근 앱 탭의 슬롯은 저장되지 않으므로 변경이 아니다")
 
     var withLabel = D.updateSlot(s, tab: 1, at: 0) { $0.label = "ZZ" }
     let data = try! JSONEncoder().encode(withLabel)
@@ -240,7 +260,6 @@ private func dirtyDetection() {
     let b = D.updateSlot(s, tab: 2, at: 0) { $0.action = .macroSequence(stopOnError: true, steps: [.openURL("https://a.example")]) }
     check(!D.isDirty(baseline: a, draft: b), "stopOnError 생략 표기와 명시 표기는 같다")
 
-    check(D.isDirty(baseline: Settings.defaults, draft: D.moveTab(Settings.defaults, at: 0, by: 1)), "기본 두 탭 순서 변경은 변경")
 }
 
 private func appPicker() {
@@ -308,8 +327,6 @@ private final class FeedbackStore: SettingsStoring {
 }
 
 private final class FeedbackCatalog: AppCatalog {
-    var onAppActivated: ((RunningApp) -> Void)?
-    func runningApps() -> [RunningApp] { [] }
     func frontmostApp() -> RunningApp? { nil }
     func activate(bundleId: String, pid: Int32?) async -> ActionResult { .success }
     func refocus(bundleId: String, pid: Int32?) -> Bool { true }
@@ -372,10 +389,8 @@ private func feedbackState() {
 }
 
 private final class CountingCatalog: AppCatalog {
-    var onAppActivated: ((RunningApp) -> Void)?
     private(set) var scans = 0
     var list: [InstalledApp] = []
-    func runningApps() -> [RunningApp] { [] }
     func frontmostApp() -> RunningApp? { nil }
     func activate(bundleId: String, pid: Int32?) async -> ActionResult { .success }
     func refocus(bundleId: String, pid: Int32?) -> Bool { true }

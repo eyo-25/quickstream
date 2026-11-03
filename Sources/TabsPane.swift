@@ -6,7 +6,8 @@ struct TabsPane: View {
     @ObservedObject var model: SettingsModel
     let tabIndex: Int
 
-    private var tab: Tab { model.draft.tabs[tabIndex] }
+    /// 탭을 지운 직후 나가는 패널은 이미 없어진 인덱스로 다시 계산될 수 있다(탭 이름 Binding 의 get 은 `body` 의 범위 확인을 거치지 않는다). 그때는 빈 탭으로 본다.
+    private var tab: Tab { model.draft.tabs.indices.contains(tabIndex) ? model.draft.tabs[tabIndex] : Tab(id: "", name: "", type: .custom) }
     private var slots: [Slot] { tab.slots }
     private var selected: Int { max(0, min(model.selectedSlot, slots.count - 1)) }
     private var tabIssues: [ValidationIssue] { model.issues.filter { $0.tabIndex == tabIndex } }
@@ -20,19 +21,12 @@ struct TabsPane: View {
     private var editor: some View {
         OneUIPage(title: tab.name.isEmpty ? "(이름 없음)" : tab.name, subtitle: nil) {
             tabCard
-            if tab.type == .recentApps {
-                OneUICard(title: nil) {
-                    OneUIRow(symbol: "clock.arrow.circlepath", title: "최근 사용 순",
-                             subtitle: "현재 실행 중인 앱이 최근 사용 순으로 자동 채워집니다.")
-                }
-            } else {
-                previewCard
-                slotListCard
-                if slots.indices.contains(selected) {
-                    SlotEditorView(slot: slotBinding(selected), slotIndex: selected, apps: model.apps)
-                        .id(slots[selected].id)
-                        .transition(.opacity.combined(with: .scale(scale: 0.98, anchor: .top)))
-                }
+            previewCard
+            slotListCard
+            if slots.indices.contains(selected) {
+                SlotEditorView(slot: slotBinding(selected), slotIndex: selected, apps: model.apps)
+                    .id(slots[selected].id)
+                    .transition(.opacity.combined(with: .scale(scale: 0.98, anchor: .top)))
             }
         }
         // 슬롯 추가/삭제/이동/선택은 모두 같은 스프링으로 자리를 잡는다. 슬롯 id 배열과 선택 번호만 본다(이름 타이핑에는 반응하지 않는다).

@@ -13,8 +13,6 @@ struct RunningApp: Equatable, Hashable {
     var bundleId: String
     var pid: Int32
     var name: String
-    var appPath: String?
-    var launchedAt: Date?
 }
 
 struct InstalledApp: Equatable, Hashable, Identifiable {
@@ -35,9 +33,7 @@ enum IconTarget: Hashable {
 
 /// 앱 실행/전환/조회 (NSWorkspace). 구현: Core
 protocol AppCatalog: AnyObject {
-    /// 일반(Dock 에 보이는) 앱만. 퀵스트림 자신은 제외
-    func runningApps() -> [RunningApp]
-    /// 지금 가장 앞에 있는 일반 앱. 퀵스트림 자신이 앞이면 nil
+    /// 지금 가장 앞에 있는 일반(Dock 에 보이는) 앱. 퀵스트림 자신이 앞이면 nil
     func frontmostApp() -> RunningApp?
     /// 실행 중인 앱을 앞으로. 꺼져 있으면 실패
     func activate(bundleId: String, pid: Int32?) async -> ActionResult
@@ -49,8 +45,6 @@ protocol AppCatalog: AnyObject {
     func installedApps() async -> [InstalledApp]
     /// 앱 아이콘 PNG(투명 배경, pixels × pixels). 못 얻으면 nil. 호출 비용이 작도록 구현이 캐시한다.
     func iconPNG(for target: IconTarget, pixels: Int) -> Data?
-    /// 다른 앱이 앞으로 올 때마다(퀵스트림 자신 제외) 호출
-    var onAppActivated: ((RunningApp) -> Void)? { get set }
 }
 
 struct ValidationIssue: Equatable {
@@ -88,7 +82,7 @@ struct SlotView: Equatable {
 struct TabView: Equatable {
     var id: String
     var name: String
-    /// 허브 캡션: RECENT / PINNED / CUSTOM
+    /// 허브 캡션: PINNED / CUSTOM
     var caption: String
     /// 길이 항상 8. 빈 슬롯은 nil
     var slots: [SlotView?]
@@ -127,7 +121,7 @@ struct OverlayState: Equatable {
     var focusGlow: Bool = true
 }
 
-/// 설정 + 런타임 데이터(최근 앱, 아이콘)를 오버레이 상태로 풀고, 슬롯을 실행한다. 구현: Core
+/// 설정 + 런타임 데이터(아이콘)를 오버레이 상태로 풀고, 슬롯을 실행한다. 구현: Core
 protocol DeckProviding: AnyObject {
     /// 표시 직전에 부른다. 이 상태를 보낸 뒤에야 execute 가 그 상태 기준으로 동작한다(commit 의미).
     func buildState() async -> OverlayState

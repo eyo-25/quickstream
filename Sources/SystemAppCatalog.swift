@@ -2,44 +2,19 @@ import AppKit
 
 /// NSWorkspace 기반 AppCatalog. Electron 판 `native/QuickStreamBridge.swift` 의 동작을 그대로 옮겼다.
 final class SystemAppCatalog: AppCatalog, @unchecked Sendable {
-    var onAppActivated: ((RunningApp) -> Void)?
-
     private let ownPid = ProcessInfo.processInfo.processIdentifier
     private let lock = NSLock()
     private var iconCache: [String: Data] = [:]
     /// 오래 안 쓴 순서(앞이 가장 오래됨). 상한을 넘으면 앞에서부터 버린다.
     private var iconOrder: [String] = []
     private static let iconCacheLimit = 256
-    private var observer: NSObjectProtocol?
-
-    init() {
-        observer = NSWorkspace.shared.notificationCenter.addObserver(
-            forName: NSWorkspace.didActivateApplicationNotification, object: nil, queue: .main
-        ) { [weak self] note in
-            guard let self,
-                  let app = note.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication,
-                  let ref = self.describe(app) else { return }
-            self.onAppActivated?(ref)
-        }
-    }
-
-    deinit {
-        if let observer { NSWorkspace.shared.notificationCenter.removeObserver(observer) }
-    }
-
     // MARK: - 실행 중 앱
 
     /// 일반(Dock 에 보이는) 앱만. 백그라운드 유틸·자기 자신·종료된 앱은 제외
     private func describe(_ app: NSRunningApplication) -> RunningApp? {
         guard app.activationPolicy == .regular, !app.isTerminated,
               app.processIdentifier != ownPid, let bundleId = app.bundleIdentifier else { return nil }
-        return RunningApp(
-            bundleId: bundleId, pid: app.processIdentifier, name: app.localizedName ?? bundleId,
-            appPath: app.bundleURL?.path, launchedAt: app.launchDate)
-    }
-
-    func runningApps() -> [RunningApp] {
-        NSWorkspace.shared.runningApplications.compactMap(describe)
+        return RunningApp(bundleId: bundleId, pid: app.processIdentifier, name: app.localizedName ?? bundleId)
     }
 
     func frontmostApp() -> RunningApp? {

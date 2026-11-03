@@ -6,7 +6,6 @@ import UserNotifications
 final class AppController: NSObject, NSMenuDelegate {
     let store: SettingsStore
     private let catalog = SystemAppCatalog()
-    private let recent = RecentTracker()
     private let deck: Deck
     private let overlay = OverlayController()
     private let shortcut = GlobalShortcut()
@@ -38,7 +37,7 @@ final class AppController: NSObject, NSMenuDelegate {
 
     override init() {
         store = SettingsStore()
-        deck = Deck(store: store, catalog: catalog, recent: recent)
+        deck = Deck(store: store, catalog: catalog)
         super.init()
     }
 
@@ -53,15 +52,9 @@ final class AppController: NSObject, NSMenuDelegate {
         overlay.onResignKey = { [weak self] in self?.overlayLostFocus() }
         overlay.hidesOnResign = !CommandLine.arguments.contains("--keep-open")
 
-        catalog.onAppActivated = { [weak self] app in
-            self?.recent.noteActivated(app.bundleId)
-            self?.deck.prewarm(apps: [app]) // 새로 앞에 온 앱의 아이콘을 다음 표시 전에 확보한다
-        }
-        if let frontmost = catalog.frontmostApp() { recent.noteActivated(frontmost.bundleId) }
-
         applyStoredSettings()
-        // 처음 보는 앱이 첫 표시에서 약어로 나오지 않게, 지금 실행 중인 앱의 아이콘을 미리 받아 둔다
-        deck.prewarm(apps: catalog.runningApps())
+        // 처음 보는 앱이 첫 표시에서 약어로 나오지 않게, 설정에 있는 앱의 아이콘을 미리 받아 둔다
+        deck.prewarm()
 
         // 메뉴와 열려 있는 정보 화면이 함께 갱신된다(정보 화면은 body 에서 상태 문구를 읽으므로 변경을 알려 줘야 다시 그린다).
         updater.onStatusChange = { [weak self] _ in

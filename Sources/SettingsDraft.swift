@@ -93,10 +93,9 @@ enum SettingsDraft {
     // MARK: 탭
 
     static func canAddTab(_ s: Settings) -> Bool { s.tabs.count < Limits.maxTabs }
-    static func canAddRecentTab(_ s: Settings) -> Bool { !s.tabs.contains { $0.type == .recentApps } }
 
     static func addTab(_ s: Settings, _ type: TabKind, name: String? = nil) -> Settings {
-        guard canAddTab(s), type != .recentApps || canAddRecentTab(s) else { return s }
+        guard canAddTab(s) else { return s }
         var next = s
         next.tabs.append(Tab(id: newId("tab", taken: s.tabs.map(\.id)), name: name ?? type.label, type: type))
         return next
@@ -123,9 +122,9 @@ enum SettingsDraft {
         return next
     }
 
-    /// 탭 복제: 탭 id 와 모든 슬롯 id 를 재부여하고 원본 바로 뒤에 둔다. 최근 앱 탭은 하나만 허용되므로 복제할 수 없다.
+    /// 탭 복제: 탭 id 와 모든 슬롯 id 를 재부여하고 원본 바로 뒤에 둔다.
     static func duplicateTab(_ s: Settings, at index: Int) -> Settings {
-        guard s.tabs.indices.contains(index), canAddTab(s), s.tabs[index].type != .recentApps else { return s }
+        guard s.tabs.indices.contains(index), canAddTab(s) else { return s }
         var copy = s.tabs[index]
         copy.id = newId("tab", taken: s.tabs.map(\.id))
         copy.name = String("\(copy.name) 복사".prefix(20))
@@ -151,14 +150,14 @@ enum SettingsDraft {
     // MARK: 슬롯
 
     private static func editSlots(_ s: Settings, _ tabIndex: Int, _ body: (inout [Slot]) -> Void) -> Settings {
-        guard s.tabs.indices.contains(tabIndex), s.tabs[tabIndex].type != .recentApps else { return s }
+        guard s.tabs.indices.contains(tabIndex) else { return s }
         var next = s
         body(&next.tabs[tabIndex].slots)
         return next
     }
 
     static func canAddSlot(_ s: Settings, tab tabIndex: Int) -> Bool {
-        s.tabs.indices.contains(tabIndex) && s.tabs[tabIndex].type != .recentApps && s.tabs[tabIndex].slots.count < Limits.slots
+        s.tabs.indices.contains(tabIndex) && s.tabs[tabIndex].slots.count < Limits.slots
     }
 
     /// 새 슬롯: 기본 이름 "슬롯 N" + 빈 앱 액션(사용자가 채워야 검증을 통과한다)
@@ -332,7 +331,7 @@ enum SettingsDraft {
 
     // MARK: 변경 여부
 
-    /// 저장 파일 왕복(Codable)을 거친 정규형. 알 수 없는 상태(최근 앱 탭의 슬롯 등)는 디코딩이 정리한다.
+    /// 저장 파일 왕복(Codable)을 거친 정규형. 저장 형식으로 정리되지 않는 상태는 디코딩이 정리한다.
     static func normalized(_ s: Settings) -> Settings {
         guard let data = try? JSONEncoder().encode(s), let back = try? JSONDecoder().decode(Settings.self, from: data) else { return s }
         return back

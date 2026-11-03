@@ -5,6 +5,7 @@ runCoreTests()
 runOverlayTests()
 runSettingsTests()
 runUpdateTests()
+runPageMetadataTests()
 
 print("checks: \(testChecks), failures: \(testFailures)")
 exit(testFailures == 0 ? 0 : 1)

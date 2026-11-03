@@ -44,6 +44,7 @@ private final class FakeCatalog: AppCatalog, @unchecked Sendable {
         switch target {
         case let .bundleId(id): return Data("png:\(id)".utf8)
         case let .appPath(path): return Data("png:\(path)".utf8)
+        case let .url(host): return Data("png:url:\(host)".utf8)
         }
     }
 }
@@ -211,7 +212,7 @@ private func testValidator() {
     checkEqual(gapDup?.text, "탭 \"고정 앱\" > 슬롯 4 > 식별자: 슬롯 id 중복: a", "빈 칸 뒤 슬롯의 번호는 링 위치")
     checkEqual(gapDup?.slotIndex, 3, "빈 칸 뒤 슬롯의 이슈 위치")
 
-    // 슬롯 키·방향키·닫기 키: 형식, 중복, 닫기 키와 겹침
+    // 슬롯 추가 키·방향키·닫기 키: 형식, 중복, 칸 번호 키·닫기 키와 겹침
     func keyed(_ id: String, key: String? = nil, direction: SlotDirection? = nil) -> Slot {
         Slot(id: id, name: "앱 \(id)", label: nil, action: .openURL("https://\(id).example"), key: key, direction: direction)
     }
@@ -220,14 +221,15 @@ private func testValidator() {
         t.closeKey = closeKey
         return t
     }
-    checkEqual(issues(withSlots([keyed("a", key: "w"), keyed("b", key: "e")])), [], "서로 다른 키는 허용")
-    check(hasIssue(withSlots([keyed("a", key: "w"), keyed("b", key: "w")]), containing: "슬롯 1 과(와) 키가 같습니다"), "같은 탭의 키 중복")
-    check(hasIssue(withSlots([keyed("a", key: "2"), keyed("b")]), containing: "슬롯 1 과(와) 키가 같습니다"), "지정한 키가 다른 칸의 기본 숫자와 겹침")
+    checkEqual(issues(withSlots([keyed("a", key: "w"), keyed("b", key: "e")])), [], "서로 다른 추가 키는 허용")
+    checkEqual(issues(withSlots([keyed("a", key: "9"), keyed("b", key: "0")])), [], "숫자 9·0 은 추가 키로 쓸 수 있다")
+    check(hasIssue(withSlots([keyed("a", key: "w"), keyed("b", key: "w")]), containing: "슬롯 1 과(와) 추가 키가 같습니다"), "같은 탭의 추가 키 중복")
+    check(hasIssue(withSlots([keyed("a", key: "2")]), containing: "숫자 1~8 은 칸 번호 키"), "추가 키는 칸 번호 숫자(1~8)를 쓸 수 없다")
     check(hasIssue(withSlots([keyed("a", key: "A")]), containing: "영문자 또는 숫자 한 글자"), "대문자는 저장 형식이 아니다")
     check(hasIssue(withSlots([keyed("a", key: "ab")]), containing: "영문자 또는 숫자 한 글자"), "두 글자 키 거부")
-    check(hasIssue(withSlots([keyed("a", key: "q")]), containing: "닫기 키(Q)와 같습니다"), "닫기 키와 같은 슬롯 키")
-    check(hasIssue(withSlots([keyed("a"), keyed("b")], closeKey: "2"), containing: "닫기 키(2)와 같습니다"), "닫기 키가 슬롯의 기본 숫자와 겹침")
-    checkEqual(issues(withSlots([keyed("a", key: "z")], closeKey: "2")), [], "빈 칸의 기본 숫자는 닫기 키와 겹쳐도 된다(그 칸은 키가 없을 뿐)")
+    check(hasIssue(withSlots([keyed("a", key: "q")]), containing: "닫기 키(Q)와 같습니다"), "닫기 키와 같은 추가 키")
+    check(hasIssue(withSlots([keyed("a"), keyed("b")], closeKey: "2"), containing: "닫기 키(2)가 이 칸의 번호 키와 같습니다"), "닫기 키가 슬롯이 있는 칸의 번호 키와 겹침")
+    checkEqual(issues(withSlots([keyed("a", key: "z")], closeKey: "2")), [], "빈 칸의 번호 키는 닫기 키와 겹쳐도 된다(그 칸은 번호 키가 없을 뿐)")
     check(hasIssue(withSlots([], closeKey: "ab"), containing: "닫기 키"), "닫기 키 형식 오류")
     check(hasIssue(withSlots([keyed("a", direction: .right), nil, keyed("c")]), containing: "슬롯 1 과(와) 방향이 같습니다"), "지정한 방향이 다른 칸의 기본 방향과 겹침")
     checkEqual(issues(withSlots([keyed("a", direction: SlotDirection.off), keyed("b", direction: SlotDirection.off)])), [], "방향을 끈 슬롯끼리는 겹쳐도 된다")
@@ -236,6 +238,39 @@ private func testValidator() {
     check(tabText.contains("\"up-right\"") && tabText.contains("\"w\""), "키·방향은 저장 JSON 에 들어간다")
     checkEqual(try! JSONDecoder().decode(Slot.self, from: tabJSON), keyed("a", key: "w", direction: .upRight), "슬롯 키·방향 저장 왕복")
     check(!(String(data: try! JSONEncoder().encode(keyed("a")), encoding: .utf8) ?? "").contains("direction"), "지정하지 않은 방향은 저장하지 않는다")
+    // 손으로 고친 키·방향·닫기 키가 틀려도 파일 전체를 버리지 않는다(읽을 수 없는 값은 지정 없음)
+    func decodeSlot(_ extra: String) -> Slot? {
+        try? JSONDecoder().decode(Slot.self, from: Data(#"{"id":"a","name":"A","action":{"type":"open_url","url":"https://a.example"}\#(extra)}"#.utf8))
+    }
+    checkEqual(decodeSlot("")?.key, nil, "key 가 없으면 추가 키 없음")
+    checkEqual(decodeSlot(#","key":"W""#)?.key, "w", "대문자 key 는 소문자로 읽는다")
+    check(decodeSlot(#","key":"ab""#) != nil && decodeSlot(#","key":"ab""#)?.key == nil, "두 글자 key 는 지정 없음으로 읽고 슬롯은 남는다")
+    check(decodeSlot(#","key":7"#) != nil && decodeSlot(#","key":7"#)?.key == nil, "문자열이 아닌 key 도 파일을 버리지 않는다")
+    check(decodeSlot(#","direction":"bogus""#) != nil && decodeSlot(#","direction":"bogus""#)?.direction == nil, "알 수 없는 direction 은 지정 없음으로 읽고 슬롯은 남는다")
+    checkEqual(decodeSlot(#","direction":"up-left""#)?.direction, .upLeft, "direction 은 정상 값이면 그대로")
+    func decodeCloseKey(_ value: String) -> String? {
+        (try? JSONDecoder().decode(Settings.self, from: Data(#"{"schemaVersion":4,"platform":"darwin","closeKey":\#(value),"tabs":[{"id":"t","name":"탭","type":"custom","slots":[]}]}"#.utf8)))?.closeKey
+    }
+    checkEqual(decodeCloseKey(#""Q""#), "q", "대문자 closeKey 는 소문자로 읽는다")
+    checkEqual(decodeCloseKey(#""x""#), "x", "정상 closeKey")
+    checkEqual(decodeCloseKey(#""ab""#), "q", "틀린 closeKey 는 기본 Q 로 읽고 파일은 버리지 않는다")
+    checkEqual(decodeCloseKey("5"), "q", "문자열이 아닌 closeKey 도 파일을 버리지 않는다")
+    // 키가 칸 번호 키를 대신하던 이전 빌드가 저장한 값을 읽어도 파일 전체가 기본값으로 대체되지 않는다
+    check(decodeSlot(#","key":"3""#) != nil && decodeSlot(#","key":"3""#)?.key == nil, "추가 키로 쓸 수 없는 숫자(1~8)는 지정 없음으로 읽고 슬롯은 남는다")
+    checkEqual(decodeSlot(#","key":"9""#)?.key, "9", "숫자 9 는 추가 키로 그대로")
+    func decodeSettings(closeKey: String, slots: [String]) -> Settings? {
+        let tab = #"{"id":"t","name":"탭","type":"custom","slots":[\#(slots.joined(separator: ","))]}"#
+        return try? JSONDecoder().decode(Settings.self, from: Data(#"{"schemaVersion":4,"platform":"darwin","closeKey":"\#(closeKey)","tabs":[\#(tab)]}"#.utf8))
+    }
+    let oneSlot = #"{"id":"a","name":"A","action":{"type":"open_url","url":"https://a.example"},"key":"z"}"#
+    let oldBuild = decodeSettings(closeKey: "1", slots: [oneSlot])
+    checkEqual(oldBuild?.closeKey, "q", "슬롯이 있는 칸의 번호 키(1)를 닫기 키로 저장한 이전 파일은 기본 Q 로 읽는다")
+    check(oldBuild.map { SettingsValidator.validate($0).isEmpty } == true, "그렇게 읽은 설정은 검증을 통과한다(파일 전체가 기본값으로 바뀌지 않는다)")
+    checkEqual(decodeSettings(closeKey: "2", slots: [oneSlot])?.closeKey, "2", "빈 칸의 번호 키(2)는 닫기 키로 그대로 읽는다")
+    let clash = decodeSettings(closeKey: "1", slots: [oneSlot.replacingOccurrences(of: "\"key\":\"z\"", with: "\"key\":\"q\"")])
+    checkEqual(clash?.closeKey, "q", "닫기 키 이전: 번호 키 1 을 닫기 키로 쓰던 파일은 Q 로 읽는다")
+    check(clash?.tabs[0].slots[0]?.key == nil, "그때 Q 를 추가 키로 쓰던 슬롯은 추가 키를 잃고 슬롯은 남는다")
+    check(clash.map { SettingsValidator.validate($0).isEmpty } == true, "이전한 결과가 닫기 키와 추가 키 겹침으로 검증에 걸리지 않는다")
     // 다른 탭이면 같은 슬롯 id 허용
     s = .defaults
     s.tabs[0].slots = [slot("a")]
@@ -658,7 +693,7 @@ private func testDeck(_ root: URL) async {
             slot("n", .launchApp(bundleId: "com.apple.Notes", appPath: nil)),
             slot("p", .launchApp(bundleId: nil, appPath: "/Applications/P.app")),
             slot("m", .macroSequence(stopOnError: true, steps: [.launchApp(bundleId: "macro.step", appPath: nil)])),
-            slot("u", .openURL("https://a.com")),
+            slot("u", .openURL("https://A.com/path")),
         ]
         let catalog = FakeCatalog()
         let gate = DispatchSemaphore(value: 0)
@@ -666,6 +701,7 @@ private func testDeck(_ root: URL) async {
             _ = gate.wait(timeout: .now() + 10) // 풀어 주기 전까지 아이콘 렌더가 끝나지 않는다
             if case let .bundleId(id) = target { return Data("png:\(id)".utf8) }
             if case let .appPath(path) = target { return Data("png:\(path)".utf8) }
+            if case let .url(host) = target { return Data("png:url:\(host)".utf8) }
             return nil
         }
         let store = makeStore(s)
@@ -679,7 +715,9 @@ private func testDeck(_ root: URL) async {
         checkEqual(second.tabs[0].slots[0]?.iconPNG, Data("png:com.apple.Notes".utf8), "launch bundleId 아이콘")
         checkEqual(second.tabs[0].slots[1]?.iconPNG, Data("png:/Applications/P.app".utf8), "launch appPath 아이콘")
         checkEqual(second.tabs[0].slots[2]?.iconPNG, nil, "매크로 슬롯은 아이콘 없음")
-        checkEqual(second.tabs[0].slots[3]?.iconPNG, nil, "URL 슬롯은 아이콘 없음")
+        checkEqual(second.tabs[0].slots[3]?.iconPNG, Data("png:url:a.com".utf8), "URL 슬롯은 호스트(소문자)의 파비콘")
+        checkEqual(Deck.iconTarget(for: .openURL("ftp://b.com")), nil, "http/https 가 아닌 URL 은 아이콘 대상이 아님")
+        checkEqual(Deck.iconTarget(for: .openURL("https://Sub.A.com:8080/x")), .url("sub.a.com"), "URL 아이콘 대상은 소문자 호스트")
         check(!catalog.iconRequests.contains(.bundleId("macro.step")), "매크로 단계는 아이콘을 요청하지 않음")
 
         let requested = catalog.iconRequests.count
@@ -696,6 +734,8 @@ private func testDeck(_ root: URL) async {
         deck.prewarm()
         await deck.waitForIconWork()
         check(catalog.iconRequests.contains(.bundleId("later")), "prewarm 이 설정의 새 앱 아이콘을 요청")
+        checkEqual(catalog.iconRequests.filter { $0 == .url("a.com") }.count, 2, "prewarm 은 캐시된 URL 파비콘도 다시 읽는다(새로 받은 아이콘 반영)")
+        checkEqual(catalog.iconRequests.filter { $0 == .bundleId("com.apple.Notes") }.count, 1, "앱 아이콘은 prewarm 에서 다시 요청하지 않는다")
     }
 
     // 아이콘 표시를 끄면 요청하지 않는다

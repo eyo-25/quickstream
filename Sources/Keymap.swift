@@ -72,8 +72,13 @@ enum SlotKey {
         codes.first { $0.value == code }?.key ?? keypadCodes.first { $0.value == code }?.key
     }
 
-    /// 링 위치(0~7)의 기본 키: 숫자 1~8
+    /// 링 위치(0~7)의 기본 키: 숫자 1~8. 칸에 슬롯이 있든 없든 늘 그 칸을 고른다.
     static func defaultKey(position: Int) -> String { String(position + 1) }
+
+    /// 칸 번호 키(숫자 1~8)인가. 슬롯에 추가로 지정하는 키는 이 숫자를 쓸 수 없다.
+    static func isPositionDigit(_ key: String) -> Bool {
+        (0..<Limits.slots).contains { defaultKey(position: $0) == key }
+    }
 
     /// 화면 표기(대문자)
     static func display(_ key: String) -> String { key.uppercased() }
@@ -94,25 +99,22 @@ struct TabKeymap: Equatable {
 
 enum Keymap {
     /// 슬롯 배열(인덱스 = 링 위치, nil = 빈 칸)과 닫기 키로 실제 배정을 정한다.
-    /// 우선순위: ① 사용자가 지정한 키/방향 ② 칸에 슬롯이 있으면 기본값(숫자·링 방향) ③ 빈 칸의 기본값(선택만 하게).
-    /// 이미 쓰인 키는 뒤 순위가 가져가지 못하고(그 칸은 키 없음), 닫기 키는 어떤 칸도 가져가지 못한다.
-    /// 설정 검증이 지정값의 중복을 막으므로 정상 설정에서는 ①끼리 부딪히지 않는다(그래도 앞 칸이 이기게 정해 둔다).
+    /// 키: 칸 번호 숫자(1~8)는 늘 그 칸을 고르고(빈 칸이면 선택만), 슬롯에 추가로 지정한 키(`Slot.key`)가 그 슬롯을 하나 더 고른다.
+    /// 닫기 키는 어떤 칸도 가져가지 못한다(닫기 키가 숫자면 그 칸은 번호 키를 잃는다). 겹치면 앞선 것이 이긴다: 번호 키 → 추가 키(앞 칸 먼저).
+    /// 방향: ① 사용자가 지정한 방향 ② 칸에 슬롯이 있으면 링 방향 ③ 빈 칸의 링 방향(선택만 하게). 먼저 가져간 쪽이 이긴다.
+    /// 설정 검증이 겹침을 막으므로 정상 설정에서는 부딪히지 않는다(그래도 결과가 일정하게 정해 둔다).
     static func build(slots: [Slot?], closeKey: String) -> TabKeymap {
         let cells = (0..<Limits.slots).map { $0 < slots.count ? slots[$0] : nil }
 
-        var keyOf: [Int: String] = [:]
         var takenKeys: Set<String> = [closeKey]
-        func claimKey(_ position: Int, _ key: String) {
-            if takenKeys.insert(key).inserted { keyOf[position] = key }
+        var positionOfKey: [String: Int] = [:]
+        var digitOf: [Int: String] = [:]
+        for p in 0..<Limits.slots {
+            let digit = SlotKey.defaultKey(position: p)
+            if takenKeys.insert(digit).inserted { positionOfKey[digit] = p; digitOf[p] = digit }
         }
         for p in 0..<Limits.slots {
-            if let key = cells[p]?.key.flatMap(SlotKey.normalize) { claimKey(p, key) }
-        }
-        for p in 0..<Limits.slots where cells[p] != nil && keyOf[p] == nil {
-            claimKey(p, SlotKey.defaultKey(position: p))
-        }
-        for p in 0..<Limits.slots where cells[p] == nil {
-            claimKey(p, SlotKey.defaultKey(position: p))
+            if let extra = cells[p]?.key.flatMap(SlotKey.normalize), takenKeys.insert(extra).inserted { positionOfKey[extra] = p }
         }
 
         var directionOf: [Int: SlotDirection] = [:]
@@ -132,17 +134,19 @@ enum Keymap {
         }
 
         var keys: [UInt16: Int] = [:]
-        for (position, key) in keyOf {
+        for (key, position) in positionOfKey {
             for code in SlotKey.keyCodes(for: key) { keys[code] = position }
         }
         var directions: [SlotDirection: Int] = [:]
         for (position, direction) in directionOf { directions[direction] = position }
-        return TabKeymap(keys: keys, directions: directions, keyLabels: (0..<Limits.slots).map { keyOf[$0].map(SlotKey.display) ?? "" })
+        // 타일 배지에는 칸 번호 키(숫자)를 보인다. 닫기 키로 번호를 잃은 칸은 배지가 없다.
+        return TabKeymap(keys: keys, directions: directions, keyLabels: (0..<Limits.slots).map { digitOf[$0].map(SlotKey.display) ?? "" })
     }
 
-    /// 칸이 지금 쓰는 키(지정값, 없으면 기본 숫자). 설정 창이 "기본" 표시와 충돌 검사에 쓴다.
-    static func effectiveKey(_ slot: Slot, position: Int) -> String {
-        slot.key.flatMap(SlotKey.normalize) ?? SlotKey.defaultKey(position: position)
+
+    /// 칸에 추가로 지정한 키(없으면 nil). 형식이 틀린 값은 지정 없음으로 본다.
+    static func extraKey(_ slot: Slot) -> String? {
+        slot.key.flatMap(SlotKey.normalize)
     }
 
     /// 칸이 지금 쓰는 방향(지정값, 없으면 링 방향). `off` 면 방향키로 고르지 않는다.

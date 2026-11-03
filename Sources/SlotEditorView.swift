@@ -13,9 +13,11 @@ struct SlotEditorView: View {
     var keyConflict: (String) -> String? = { _ in nil }
     /// 이 방향을 이미 쓰는 같은 탭의 다른 슬롯 링 위치(없으면 nil)
     var directionOwner: (SlotDirection) -> Int? = { _ in nil }
-    /// 키·방향 변경(nil 이면 기본으로 되돌림). 겹침 검사와 저장 형태 정리는 호출 측(`SettingsDraft`)이 한다.
+    /// 추가 키·방향 변경(키 nil 이면 추가 키 없음, 방향 nil 이면 링 기본 방향). 겹침 검사와 저장 형태 정리는 호출 측(`SettingsDraft`)이 한다.
     var onKey: (String?) -> Void = { _ in }
     var onDirection: (SlotDirection?) -> Void = { _ in }
+    /// 슬롯의 URL 동작이 바뀌었다(입력할 때마다 불린다). 호출 측이 입력이 멈춘 뒤 페이지 제목·파비콘을 가져온다.
+    var onURLChange: (String) -> Void = { _ in }
     var keyHint: String?
     var onKeyHint: (String?) -> Void = { _ in }
 
@@ -42,13 +44,13 @@ struct SlotEditorView: View {
             }
             OneUIDivider(inset: OneUI.rowInset)
             OneUIRow(
-                title: "키",
-                subtitle: keyHint ?? "오버레이에서 이 키(영문자·숫자)를 누르면 실행합니다. 기본은 칸 번호 \(defaultKey)이고, Delete 로 기본으로 되돌립니다.",
+                title: "추가 키",
+                subtitle: keyHint ?? "칸 번호 키(\(defaultKey))는 그대로 쓰고, 이 슬롯을 실행하는 키(영문자·숫자)를 하나 더 지정합니다. 기본은 없음이며 Delete 로 지웁니다.",
                 warnSubtitle: keyHint != nil) {
                 KeyRecorder(
-                    display: SlotKey.display(slot.key ?? defaultKey) + (slot.key == nil || slot.key == defaultKey ? " (기본)" : ""),
+                    display: slot.key.map(SlotKey.display) ?? "없음",
                     accent: accent,
-                    accessibilityLabel: "슬롯 \(slotIndex + 1) 키 녹화. 클릭한 뒤 영문자나 숫자 키를 누르세요",
+                    accessibilityLabel: "슬롯 \(slotIndex + 1) 추가 키 녹화. 클릭한 뒤 영문자나 숫자 키를 누르세요",
                     validate: keyConflict,
                     onChange: onKey,
                     onHint: onKeyHint)
@@ -64,7 +66,11 @@ struct SlotEditorView: View {
             ActionEditorView(
                 action: Binding(
                     get: { slot.action },
-                    set: { slot = SettingsDraft.applyingAction($0, to: slot, apps: apps) }),
+                    set: { newAction in
+                        let old = slot.action
+                        slot = SettingsDraft.applyingAction(newAction, to: slot, apps: apps)
+                        if case let .openURL(url) = newAction, newAction != old { onURLChange(url) }
+                    }),
                 apps: apps,
                 allowMacro: true,
                 label: "슬롯 \(slotIndex + 1)")

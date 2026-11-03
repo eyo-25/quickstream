@@ -69,19 +69,28 @@ final class SettingsModel: ObservableObject {
     /// 저장이 성공했을 때만 불린다(실패·검증에 막힌 저장·변경 없는 저장에서는 부르지 않는다). 설정 창은 이걸로 스스로 닫는다.
     var onSaved: () -> Void = {}
     private var appsGeneration = 0
+    /// 새 파비콘이 저장될 때마다 늘어난다(미리보기가 아이콘을 다시 읽게 하는 신호)
+    @Published private(set) var iconRevision = 0
+    private let pageMetadata: PageMetadataFetching
+    private let metadataDebounce: Duration
+    private var metadataTask: Task<Void, Never>?
 
     init(store: SettingsStoring,
          catalog: AppCatalog,
          save: @escaping (Settings) -> ActionResult,
          checkForUpdates: @escaping () -> Void,
          versionText: @escaping () -> String,
-         onRecordingChange: @escaping (Bool) -> Void = { _ in }) {
+         onRecordingChange: @escaping (Bool) -> Void = { _ in },
+         pageMetadata: PageMetadataFetching = WebPageMetadataFetcher(),
+         metadataDebounce: Duration = .milliseconds(900)) {
         self.store = store
         self.catalog = catalog
         self.saveHandler = save
         self.checkForUpdates = checkForUpdates
         self.versionText = versionText
         self.onRecordingChange = onRecordingChange
+        self.pageMetadata = pageMetadata
+        self.metadataDebounce = metadataDebounce
         baseline = store.current
         draft = store.current
         focusHexInput = store.current.overlay.focusHex
@@ -97,6 +106,7 @@ final class SettingsModel: ObservableObject {
 
     /// 창을 다시 열 때: 디스크 상태 기준으로 편집을 새로 시작한다(설치 앱 목록도 다시 읽는다)
     func resetFromStore() {
+        metadataTask?.cancel()
         baseline = store.current
         draft = store.current
         focusHexInput = draft.overlay.focusHex
@@ -217,6 +227,27 @@ final class SettingsModel: ObservableObject {
               let from = draft.tabs.firstIndex(where: { $0.id == id }),
               let to = draft.tabs.firstIndex(where: { $0.id == targetId }) else { return }
         draft = SettingsDraft.moveTab(draft, at: from, by: to - from)
+    }
+
+    /// 슬롯의 URL 이 바뀌었다: 입력이 잠시 멈추면 그 페이지의 제목과 파비콘을 가져와 이름·라벨(약어)과 아이콘으로 쓴다.
+    /// 입력 도중의 미완성 주소(`https://g`)로 요청하지 않도록 호스트에 점이 있는 http/https 주소만, 마지막 입력 뒤 `metadataDebounce` 가 지나야 요청한다.
+    /// 제목을 기다리는 사이 URL 이 바뀌었거나 사용자가 이름을 직접 고쳤으면 이름·라벨은 건드리지 않는다. 제목을 못 읽으면 호스트 이름을 쓴다.
+    func slotURLChanged(tab tabId: String, slot slotId: String, url: String) {
+        metadataTask?.cancel()
+        guard isHttpURL(url), let parsed = URL(string: url), (parsed.host ?? "").contains(".") else { return }
+        let nameAtChange = draft.tabs.first(where: { $0.id == tabId })?.slots.compactMap { $0 }.first(where: { $0.id == slotId })?.name
+        let fetcher = pageMetadata
+        let delay = metadataDebounce
+        metadataTask = Task { [weak self] in
+            try? await Task.sleep(for: delay)
+            guard !Task.isCancelled else { return }
+            let info = await fetcher.fetch(parsed)
+            guard !Task.isCancelled, let self else { return }
+            if info.hasIcon { iconRevision += 1 }
+            var host = parsed.host ?? ""
+            if host.hasPrefix("www.") { host.removeFirst(4) }
+            draft = SettingsDraft.applyingPageTitle(info.title ?? host, url: url, tab: tabId, slot: slotId, expectedName: nameAtChange, to: draft)
+        }
     }
 }
 

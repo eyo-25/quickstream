@@ -198,34 +198,31 @@ enum SettingsDraft {
         }
     }
 
-    /// 옮기거나 맞바꾼 슬롯의 지정 키·방향이 새 자리에서 다른 슬롯(또는 닫기 키)과 겹치면 그 지정을 풀어 기본으로 되돌린다.
+    /// 옮기거나 맞바꾼 슬롯의 방향 지정이 새 자리에서 다른 슬롯의 방향(지정값·링 기본)과 겹치면 그 지정을 풀어 기본으로 되돌린다.
     /// (예: ↑ 를 지정한 슬롯이 2번 칸으로 가면, 1번 칸으로 온 슬롯의 기본 ↑ 와 겹친다.) 옮긴 두 칸만 본다.
-    private static func droppingConflicts(_ list: inout [Slot?], positions: [Int], closeKey: String) {
+    /// 추가 키는 칸 위치와 무관하게 슬롯에 붙어 다니므로 옮겨도 겹치지 않는다.
+    private static func droppingDirectionConflicts(_ list: inout [Slot?], positions: [Int]) {
         for p in positions {
-            guard var slot = list[p] else { continue }
-            let snapshot = list
-            func othersContain(_ test: (Slot, Int) -> Bool) -> Bool {
-                snapshot.enumerated().contains { q, entry in q != p && entry.map { test($0, q) } == true }
+            guard var slot = list[p], let direction = slot.direction, direction != .off else { continue }
+            let clash = list.enumerated().contains { q, entry in
+                q != p && entry.map { Keymap.effectiveDirection($0, position: q) == direction } == true
             }
-            if let key = slot.key.flatMap(SlotKey.normalize), key == closeKey || othersContain({ Keymap.effectiveKey($0, position: $1) == key }) {
-                slot.key = nil
-            }
-            if let direction = slot.direction, direction != .off, othersContain({ Keymap.effectiveDirection($0, position: $1) == direction }) {
+            if clash {
                 slot.direction = nil
+                list[p] = slot
             }
-            list[p] = slot
         }
     }
 
     /// 드래그로 슬롯 옮기기: 빈 칸이면 그 칸으로 옮기고, 찬 칸이면 둘을 맞바꾼다. 출발 칸이 비었거나 같은 칸이면 바꾸지 않는다.
-    /// 옮긴 슬롯의 지정 키·방향이 새 자리에서 겹치면 그 지정은 풀린다.
+    /// 옮긴 슬롯의 방향 지정이 새 자리에서 겹치면 그 지정은 풀린다.
     static func moveSlot(_ s: Settings, tab tabIndex: Int, from: Int, to: Int) -> Settings {
         guard s.tabs.indices.contains(tabIndex), from != to,
               (0..<Limits.slots).contains(from), (0..<Limits.slots).contains(to),
               !isEmptyCell(s.tabs[tabIndex], from) else { return s }
         return editCells(s, tabIndex) { list in
             list.swapAt(from, to)
-            droppingConflicts(&list, positions: [from, to], closeKey: s.closeKey)
+            droppingDirectionConflicts(&list, positions: [from, to])
         }
     }
 
@@ -257,13 +254,13 @@ enum SettingsDraft {
         }
     }
 
-    // MARK: 키 배정 (슬롯 키·방향키·닫기 키)
+    // MARK: 키 배정 (슬롯 추가 키·방향키·닫기 키)
 
-    /// 이 탭에서 `key` 를 쓰는 다른 슬롯의 링 위치(지정값과 기본 숫자 모두 본다). 없으면 nil.
+    /// 이 탭에서 `key` 를 추가 키로 쓰는 다른 슬롯의 링 위치. 없으면 nil.
     static func slotUsingKey(_ s: Settings, tab tabIndex: Int, key: String, except position: Int) -> Int? {
         guard s.tabs.indices.contains(tabIndex) else { return nil }
         for (p, entry) in cells(s.tabs[tabIndex]).enumerated() where p != position {
-            if let slot = entry, Keymap.effectiveKey(slot, position: p) == key { return p }
+            if let slot = entry, Keymap.extraKey(slot) == key { return p }
         }
         return nil
     }
@@ -277,9 +274,10 @@ enum SettingsDraft {
         return nil
     }
 
-    /// 슬롯 키로 `key` 를 못 쓰는 이유(쓸 수 있으면 nil). 영문자·숫자 한 글자가 아니거나, 닫기 키이거나, 같은 탭의 다른 슬롯이 쓰는 키다.
+    /// 슬롯의 추가 키로 `key` 를 못 쓰는 이유(쓸 수 있으면 nil). 영문자·숫자 한 글자가 아니거나, 칸 번호 키(숫자 1~8)·닫기 키이거나, 같은 탭의 다른 슬롯이 추가 키로 쓴다.
     static func slotKeyConflict(_ s: Settings, tab tabIndex: Int, at position: Int, key: String) -> String? {
         guard let normalized = SlotKey.normalize(key) else { return "영문자 또는 숫자 키만 쓸 수 있습니다" }
+        if SlotKey.isPositionDigit(normalized) { return "숫자 1~8 은 칸 번호 키로 이미 쓰입니다" }
         if normalized == s.closeKey { return "닫기 키(\(SlotKey.display(normalized)))와 같습니다" }
         if let other = slotUsingKey(s, tab: tabIndex, key: normalized, except: position) {
             return "슬롯 \(other + 1) 이(가) 이미 \(SlotKey.display(normalized)) 키를 씁니다"
@@ -287,12 +285,16 @@ enum SettingsDraft {
         return nil
     }
 
-    /// 닫기 키로 `key` 를 못 쓰는 이유(쓸 수 있으면 nil). 영문자·숫자 한 글자가 아니거나, 어느 탭의 슬롯이 이미 쓰는 키다.
+    /// 닫기 키로 `key` 를 못 쓰는 이유(쓸 수 있으면 nil). 영문자·숫자 한 글자가 아니거나, 슬롯이 있는 칸의 번호 키이거나, 어느 슬롯의 추가 키다.
     static func closeKeyConflict(_ s: Settings, key: String) -> String? {
         guard let normalized = SlotKey.normalize(key) else { return "영문자 또는 숫자 키만 쓸 수 있습니다" }
         for tab in s.tabs {
             for (p, entry) in cells(tab).enumerated() {
-                if let slot = entry, Keymap.effectiveKey(slot, position: p) == normalized {
+                guard let slot = entry else { continue }
+                if SlotKey.defaultKey(position: p) == normalized {
+                    return "탭 ‘\(tab.name)’ 의 슬롯 \(p + 1) 의 번호 키와 같습니다"
+                }
+                if Keymap.extraKey(slot) == normalized {
                     return "탭 ‘\(tab.name)’ 의 슬롯 \(p + 1) 이(가) 이미 \(SlotKey.display(normalized)) 키를 씁니다"
                 }
             }
@@ -300,12 +302,11 @@ enum SettingsDraft {
         return nil
     }
 
-    /// 슬롯 키를 정한다. nil(또는 기본 숫자와 같은 키)이면 기본으로 되돌린다. 쓸 수 없는 키면, 기본으로 되돌릴 때도 그 기본 숫자를 다른 곳이 쓰고 있으면 바꾸지 않는다.
+    /// 슬롯의 추가 키를 정한다. nil 이면 추가 키를 없앤다(언제나 가능). 쓸 수 없는 키면 바꾸지 않는다.
     static func settingSlotKey(_ s: Settings, tab tabIndex: Int, at position: Int, to key: String?) -> Settings {
-        let requested = key ?? SlotKey.defaultKey(position: position)
-        guard slotKeyConflict(s, tab: tabIndex, at: position, key: requested) == nil, let normalized = SlotKey.normalize(requested) else { return s }
-        let stored: String? = normalized == SlotKey.defaultKey(position: position) ? nil : normalized
-        return updateSlot(s, tab: tabIndex, at: position) { $0.key = stored }
+        guard let key else { return updateSlot(s, tab: tabIndex, at: position) { $0.key = nil } }
+        guard slotKeyConflict(s, tab: tabIndex, at: position, key: key) == nil, let normalized = SlotKey.normalize(key) else { return s }
+        return updateSlot(s, tab: tabIndex, at: position) { $0.key = normalized }
     }
 
     /// 슬롯의 방향키 배정을 정한다. nil(또는 링 기본 방향과 같은 값)이면 기본으로 되돌린다. 같은 탭의 다른 슬롯이 쓰는 방향이면(기본으로 되돌릴 때도) 바꾸지 않는다.
@@ -496,18 +497,35 @@ enum SettingsDraft {
         return appFileName(path: app.appPath)
     }
 
-    /// 슬롯의 동작을 `newAction` 으로 바꾼다. 앱이 바뀌어 파일 이름을 알 수 있으면 이름(검증기와 같은 UTF-16 40유닛 상한)과 라벨을 그 파일 이름으로 다시 정한다.
-    /// 사용자가 정한 이름·라벨도 덮어쓴다. 파일 이름을 알 수 없는 편집(번들 ID 직접 입력 중, 종류 변경 등)은 이름·라벨을 건드리지 않는다.
+    /// 슬롯의 이름(검증기와 같은 UTF-16 40유닛 상한)과 라벨을 `text` 로 다시 정한다.
     /// 약어가 검증기 상한(UTF-16 3유닛)을 넘으면(이모지·NFD 한글 등) 라벨은 비워 화면이 이름에서 만들게 한다.
+    private static func naming(_ slot: Slot, from text: String) -> Slot {
+        var next = slot
+        var name = text
+        while name.utf16.count > 40 { name.removeLast() }
+        next.name = name
+        let initials = slotInitials(text)
+        next.label = initials.utf16.count <= 3 ? normalizeLabel(initials) : nil
+        return next
+    }
+
+    /// 슬롯의 동작을 `newAction` 으로 바꾼다. 앱이 바뀌어 파일 이름을 알 수 있으면 이름과 라벨을 그 파일 이름으로 다시 정한다.
+    /// 사용자가 정한 이름·라벨도 덮어쓴다. 파일 이름을 알 수 없는 편집(번들 ID 직접 입력 중, 종류 변경 등)은 이름·라벨을 건드리지 않는다.
     static func applyingAction(_ newAction: Action, to slot: Slot, apps: [InstalledApp]) -> Slot {
         var next = slot
         next.action = newAction
         guard newAction != slot.action, let fileName = appFileName(of: newAction, apps: apps) else { return next }
-        var name = fileName
-        while name.utf16.count > 40 { name.removeLast() }
-        next.name = name
-        let initials = slotInitials(fileName)
-        next.label = initials.utf16.count <= 3 ? normalizeLabel(initials) : nil
-        return next
+        return naming(next, from: fileName)
+    }
+
+    /// URL 슬롯에 그 페이지의 제목을 이름·라벨(약어)로 넣는다. 제목을 기다리는 사이에 URL 이 바뀌었거나(`url` 이 지금 동작과 다름),
+    /// 사용자가 이름을 직접 고쳤거나(`expectedName` 이 주어졌는데 지금 이름과 다름), 슬롯이 없어졌거나, 제목이 비면 바꾸지 않는다.
+    static func applyingPageTitle(_ title: String, url: String, tab tabId: String, slot slotId: String, expectedName: String?, to s: Settings) -> Settings {
+        let text = title.split(whereSeparator: { $0.isWhitespace }).joined(separator: " ")
+        guard !text.isEmpty, let tabIndex = s.tabs.firstIndex(where: { $0.id == tabId }),
+              let position = cells(s.tabs[tabIndex]).firstIndex(where: { $0?.id == slotId }),
+              let slot = cells(s.tabs[tabIndex])[position], slot.action == .openURL(url),
+              expectedName == nil || slot.name == expectedName else { return s }
+        return updateSlot(s, tab: tabIndex, at: position) { $0 = naming($0, from: text) }
     }
 }

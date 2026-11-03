@@ -129,10 +129,27 @@ struct Slot: Codable, Equatable, Identifiable {
     /// 타일 약어(1~3자). 없으면 이름에서 자동 생성
     var label: String?
     var action: Action
-    /// 이 슬롯을 실행하는 키(영문자·숫자 한 글자, 소문자). 없으면 링 위치 번호 숫자(1~8)
+    /// 기본 칸 번호 키(숫자 1~8) 말고 이 슬롯을 하나 더 실행하는 키(영문자·숫자 한 글자, 소문자). 없으면 추가 키 없음. 숫자 1~8 은 쓸 수 없다.
     var key: String?
     /// 이 슬롯을 고르는 방향키 조합. 없으면 링 위치의 방향, `off` 면 방향키로 고르지 않는다.
     var direction: SlotDirection?
+}
+
+extension Slot {
+    private enum DecodeKeys: String, CodingKey { case id, name, label, action, key, direction }
+
+    /// 키·방향은 손으로 고친 값이 틀려도 파일 전체를 버리지 않는다: 읽을 수 없으면 지정 없음(기본 배정)으로 읽고, 대문자 키는 소문자로 읽는다.
+    /// 추가 키가 숫자 1~8 이면(키가 칸 번호 키를 대신하던 이전 빌드가 저장한 값) 지정 없음으로 읽는다: 숫자 1~8 은 늘 칸 번호 키다.
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: DecodeKeys.self)
+        self.init(
+            id: try c.decode(String.self, forKey: .id),
+            name: try c.decode(String.self, forKey: .name),
+            label: try c.decodeIfPresent(String.self, forKey: .label),
+            action: try c.decode(Action.self, forKey: .action),
+            key: ((try? c.decodeIfPresent(String.self, forKey: .key)) ?? nil).flatMap(SlotKey.normalize).flatMap { SlotKey.isPositionDigit($0) ? nil : $0 },
+            direction: (try? c.decodeIfPresent(SlotDirection.self, forKey: .direction)) ?? nil)
+    }
 }
 
 struct Tab: Codable, Equatable, Identifiable {
@@ -472,12 +489,22 @@ struct Settings: Codable, Equatable {
         platform = try c.decodeIfPresent(String.self, forKey: .platform) ?? "darwin"
         shortcut = try c.decodeIfPresent(String.self, forKey: .shortcut) ?? "Alt+Q"
         launchAtLogin = try c.decodeIfPresent(Bool.self, forKey: .launchAtLogin) ?? false
-        closeKey = try c.decodeIfPresent(String.self, forKey: .closeKey) ?? "q"
+        // 닫기 키도 손으로 고친 값이 틀려도 파일 전체를 버리지 않는다: 읽을 수 없으면 기본 Q, 대문자는 소문자로 읽는다
+        closeKey = ((try? c.decodeIfPresent(String.self, forKey: .closeKey)) ?? nil).flatMap(SlotKey.normalize) ?? "q"
         overlay = try c.decodeIfPresent(OverlaySettings.self, forKey: .overlay) ?? OverlaySettings()
         // 예전 버전이 만든 `recent-apps` 탭은 없어졌으므로 읽을 때 버린다. 그것만 있던 파일은 기본 탭으로 되돌려 탭이 항상 하나 이상 있게 한다.
         let stored = try c.decode([StoredTab].self, forKey: .tabs)
         let kept = stored.compactMap(\.tab)
         tabs = kept.isEmpty && !stored.isEmpty ? Settings.defaults.tabs : kept
+        // 닫기 키가 슬롯이 있는 칸의 번호 키(숫자 1~8)와 같으면(그 칸이 번호 키를 대신하던 이전 빌드가 저장한 값) 기본 Q 로 읽는다. 안 그러면 검증에 걸려 파일 전체가 기본값으로 바뀐다.
+        // 그때 Q 를 추가 키로 쓰던 슬롯이 있으면(닫기 키가 Q 가 아니라서 합법이던 값) 그 추가 키는 지정 없음으로 읽는다.
+        if let position = (0..<Limits.slots).first(where: { SlotKey.defaultKey(position: $0) == closeKey }),
+           tabs.contains(where: { $0.slots.indices.contains(position) && $0.slots[position] != nil }) {
+            closeKey = "q"
+            for t in tabs.indices {
+                for p in tabs[t].slots.indices where tabs[t].slots[p]?.key == "q" { tabs[t].slots[p]?.key = nil }
+            }
+        }
     }
 
     /// 첫 실행 기본값: 비어 있는 고정 앱 탭 하나. 탭은 항상 하나 이상 있어야 한다.

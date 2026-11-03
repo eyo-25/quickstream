@@ -41,16 +41,9 @@ struct TabsPane: View {
                     accent: model.palette.swatches.accentText.nsColor,
                     keyConflict: { SettingsDraft.slotKeyConflict(model.draft, tab: tabIndex, at: selected, key: $0) },
                     directionOwner: { SettingsDraft.slotUsingDirection(model.draft, tab: tabIndex, direction: $0, except: selected) },
-                    onKey: { key in
-                        // 기본으로 되돌리려는데 그 기본 키(칸 번호 숫자)를 다른 슬롯이 이미 쓰면 막고 이유를 보인다
-                        let fallback = SlotKey.defaultKey(position: selected)
-                        if key == nil, let reason = SettingsDraft.slotKeyConflict(model.draft, tab: tabIndex, at: selected, key: fallback) {
-                            model.slotKeyHint = "기본 키(\(SlotKey.display(fallback)))로 되돌릴 수 없습니다 — \(reason)"
-                            return
-                        }
-                        model.draft = SettingsDraft.settingSlotKey(model.draft, tab: tabIndex, at: selected, to: key)
-                    },
+                    onKey: { model.draft = SettingsDraft.settingSlotKey(model.draft, tab: tabIndex, at: selected, to: $0) },
                     onDirection: { model.draft = SettingsDraft.settingSlotDirection(model.draft, tab: tabIndex, at: selected, to: $0) },
+                    onURLChange: { model.slotURLChanged(tab: tab.id, slot: slot.id, url: $0) },
                     keyHint: model.slotKeyHint,
                     onKeyHint: { model.slotKeyHint = $0 })
                     .id(slot.id)

@@ -7,7 +7,7 @@ enum KeyRecording {
     enum Outcome: Equatable {
         /// Esc: 녹화 취소
         case cancel
-        /// Delete: 지정을 지우고 기본으로 되돌린다
+        /// Delete: 지정을 지운다(슬롯의 추가 키는 없앤다, 닫기 키는 기본 Q 로 되돌린다)
         case clear
         /// 확정된 키(영문자·숫자 한 글자, 소문자)
         case key(String)
@@ -34,7 +34,7 @@ enum KeyRecording {
     }
 }
 
-/// 클릭하고 키 하나(영문자·숫자)를 누르면 그 키를 돌려주는 버튼. Delete 는 기본으로 되돌리고 Esc 는 취소한다.
+/// 클릭하고 키 하나(영문자·숫자)를 누르면 그 키를 돌려주는 버튼. Delete 는 지정을 지우고 Esc 는 취소한다.
 /// `validate` 가 이유를 돌려주면(다른 곳에서 쓰는 키) 그 안내를 보이고 계속 기다린다.
 struct KeyRecorder: NSViewRepresentable {
     /// 버튼에 보일 글자(녹화 중이 아닐 때)
@@ -42,7 +42,7 @@ struct KeyRecorder: NSViewRepresentable {
     var accent: NSColor
     var accessibilityLabel: String
     var validate: (String) -> String?
-    /// 확정된 키(소문자). nil 이면 기본으로 되돌림.
+    /// 확정된 키(소문자). nil 이면 지정을 지움(슬롯 추가 키는 없음, 닫기 키는 기본 Q).
     var onChange: (String?) -> Void
     var onHint: (String?) -> Void
 

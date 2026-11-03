@@ -112,24 +112,28 @@ func runOverlayTests() {
     checkEqual(SlotDirection.held([.up, .right]), .upRight, "↑→ = 오른쪽 위")
     check(SlotDirection.held([.up, .down]) == nil, "↑↓ 상쇄")
 
-    // 지정한 키·방향이 기본보다 앞선다. 방향을 끈 슬롯은 기본 방향도 내놓는다.
+    // 칸 번호 키(숫자 1~8)는 그대로 두고, 슬롯의 추가 키가 그 슬롯을 하나 더 고른다.
+    // 방향은 지정값이 링 기본 방향보다 앞서고, 방향을 끈 슬롯은 기본 방향도 내놓는다.
     func slotAt(_ id: String, key: String? = nil, direction: SlotDirection? = nil) -> Slot {
         Slot(id: id, name: "앱 \(id)", label: nil, action: .openURL("https://\(id).example"), key: key, direction: direction)
     }
     let customSlots: [Slot?] = [slotAt("a", key: "w"), slotAt("b", direction: SlotDirection.off), slotAt("c", direction: .up), nil, nil, nil, nil, nil]
     let customMap = Keymap.build(slots: customSlots, closeKey: "q")
-    checkEqual(customMap.keys[13], 0, "지정한 W 키는 1번 칸")
-    check(customMap.keys[KeyCode.digits[0]] == nil, "키를 따로 지정한 칸의 기본 숫자(1)는 아무도 가져가지 않는다")
-    checkEqual(customMap.keys[KeyCode.digits[1]], 1, "지정하지 않은 칸은 기본 숫자")
+    checkEqual(customMap.keys[13], 0, "추가 키 W 는 1번 칸")
+    checkEqual(customMap.keys[KeyCode.digits[0]], 0, "추가 키를 줘도 1번 칸의 번호 키(1)는 그대로 1번 칸")
+    checkEqual(customMap.keys[KeyCode.digits[1]], 1, "추가 키가 없는 칸도 번호 키는 그대로")
     checkEqual(customMap.directions[.up], 2, "↑ 를 지정한 3번 칸이 1번 칸의 기본 ↑ 보다 앞선다")
     check(!customMap.directions.values.contains(0), "방향을 빼앗긴 1번 칸은 방향키 배정이 없다")
     check(customMap.directions[.upRight] == nil, "방향을 끈 2번 칸은 기본 방향(↗)도 쓰지 않는다")
-    checkEqual(customMap.keyLabels, ["W", "2", "3", "4", "5", "6", "7", "8"], "배지에는 지정한 키가 보인다")
+    checkEqual(customMap.keyLabels, ["1", "2", "3", "4", "5", "6", "7", "8"], "배지에는 칸 번호 키가 보인다")
     let blocked = Keymap.build(slots: customSlots, closeKey: "4")
     check(blocked.keys[KeyCode.digits[3]] == nil, "닫기 키로 쓰는 숫자는 빈 칸도 가져가지 못한다")
-    checkEqual(blocked.keyLabels[3], "", "키가 없는 칸은 배지 표기도 비어 있다")
+    checkEqual(blocked.keyLabels[3], "", "번호 키를 잃은 칸은 배지 표기도 비어 있다")
+    // 추가 키가 번호 키와 겹치는 손으로 고친 파일: 결과가 일정해야 한다(번호 키가 이긴다)
+    let clashing = Keymap.build(slots: [slotAt("a", key: "2"), slotAt("b")], closeKey: "q")
+    checkEqual(clashing.keys[KeyCode.digits[1]], 1, "추가 키 2 와 2번 칸의 번호 키가 겹치면 번호 키가 이긴다")
 
-    // 오버레이 모델: 키·방향키·닫기 키가 지정한 배정대로 동작한다
+    // 오버레이 모델: 번호 키·추가 키·방향키·닫기 키가 배정대로 동작한다
     do {
         let views: [SlotView?] = (0..<8).map { i in
             customSlots[i] == nil ? nil : SlotView(id: "s\(i)", name: "앱\(i)", label: "A\(i)", verb: "OPEN", iconPNG: nil)
@@ -138,23 +142,29 @@ func runOverlayTests() {
             tabs: [TabView(id: "t", name: "탭", caption: "PINNED", slots: views, keymap: customMap)],
             activeTab: 0, alpha: 0.74, radius: 40, closeKeyCodes: closeX)
         let (model, log) = makeModel(state)
-        check(model.handleKeyDown(key(13)), "W 는 처리한 키")
+        check(model.handleKeyDown(key(13)), "추가 키 W 는 처리한 키")
         checkEqual(log.runs, ["t:0"], "W 는 1번 칸 실행")
         check(model.handleKeyDown(key(KeyCode.digits[1])), "숫자 2 는 처리한 키")
         checkEqual(log.runs, ["t:0", "t:1"], "숫자 2 는 2번 칸 실행")
-        check(!model.handleKeyDown(key(KeyCode.digits[0])), "아무 칸에도 배정되지 않은 키(1)는 처리하지 않는다")
-        checkEqual(log.runs.count, 2, "배정 없는 키는 실행하지 않는다")
+        check(model.handleKeyDown(key(KeyCode.digits[0])), "숫자 1 도 그대로 처리한 키")
+        checkEqual(log.runs, ["t:0", "t:1", "t:0"], "추가 키가 있어도 번호 키 1 은 1번 칸 실행")
         _ = model.handleKeyDown(key(KeyCode.digits[3]))
-        checkEqual(model.selected, 3, "빈 칸의 키는 선택만 한다")
-        checkEqual(log.runs.count, 2, "빈 칸의 키는 실행하지 않는다")
+        checkEqual(model.selected, 3, "빈 칸의 번호 키는 선택만 한다")
+        checkEqual(log.runs.count, 3, "빈 칸의 번호 키는 실행하지 않는다")
+        check(!model.handleKeyDown(key(14)), "아무 칸에도 배정되지 않은 글자(E)는 처리하지 않는다")
+        check(!model.handleKeyDown(key(14, repeat: true)), "꾹 눌러도 배정 없는 글자(E)는 처리하지 않는다(기본 동작을 건드리지 않는다)")
+        check(model.handleKeyDown(key(13, repeat: true)), "꾹 누른 추가 키(W)는 소비하되 실행하지 않는다")
+        checkEqual(log.runs.count, 3, "꾹 누른 추가 키는 다시 실행하지 않는다")
         model.present(state)
         _ = model.handleKeyDown(key(KeyCode.up))
         checkEqual(model.selected, 2, "↑ 는 ↑ 를 지정한 3번 칸을 고른다")
-        check(!model.handleKeyUp(keyCode: KeyCode.up) || log.runs.count == 2, "다른 칸으로 옮겨 가는 ↑ 는 뗄 때 실행하지 않는다")
+        let runsBeforeRelease = log.runs.count
+        _ = model.handleKeyUp(keyCode: KeyCode.up)
+        checkEqual(log.runs.count, runsBeforeRelease, "다른 칸으로 옮겨 가는 ↑ 는 뗄 때 실행하지 않는다")
         _ = model.handleKeyDown(key(KeyCode.right))
         checkEqual(model.selected, 2, "배정이 없는 방향(→)은 선택을 바꾸지 않는다")
         _ = model.handleKeyUp(keyCode: KeyCode.right)
-        checkEqual([model.keyLabel(0), model.keyLabel(1), model.keyLabel(3)], ["W", "2", "4"], "타일 배지 표기")
+        checkEqual([model.keyLabel(0), model.keyLabel(1), model.keyLabel(3)], ["1", "2", "4"], "타일 배지 표기")
         _ = model.handleKeyDown(key(7))
         checkEqual(log.closes, [true], "닫기 키 X 로 닫힌다")
         _ = model.handleKeyDown(key(KeyCode.q))

@@ -64,6 +64,7 @@ func runSettingsTests() {
     nameAndNumberOptions()
     centerNameOptions()
     focusGlowToggle()
+    pageTitleEditing()
 }
 
 private func tabEditing() {
@@ -276,26 +277,29 @@ private func macroEditing() {
 }
 
 private func keyAssignmentEditing() {
-    section("Settings: 슬롯 키·방향키·닫기 키")
+    section("Settings: 슬롯 추가 키·방향키·닫기 키")
 
     var s = Settings.defaults
     s = D.addSlot(D.addSlot(s, tab: 0, at: 0), tab: 0, at: 1)
     func slotKey(_ x: Settings, _ p: Int) -> String? { x.tabs[0].slots[p]?.key }
     func slotDirection(_ x: Settings, _ p: Int) -> SlotDirection? { x.tabs[0].slots[p]?.direction }
 
-    checkEqual(slotKey(D.settingSlotKey(s, tab: 0, at: 0, to: "w"), 0), "w", "슬롯 키 지정")
+    checkEqual(slotKey(D.settingSlotKey(s, tab: 0, at: 0, to: "w"), 0), "w", "추가 키 지정")
     checkEqual(slotKey(D.settingSlotKey(s, tab: 0, at: 0, to: "W"), 0), "w", "대문자는 소문자로 저장")
-    checkEqual(D.settingSlotKey(s, tab: 0, at: 0, to: "2"), s, "다른 슬롯의 기본 숫자(2)는 못 쓴다")
-    check(D.slotKeyConflict(s, tab: 0, at: 0, key: "2")?.contains("슬롯 2") == true, "겹치는 슬롯을 알려 준다")
+    checkEqual(D.settingSlotKey(s, tab: 0, at: 0, to: "2"), s, "숫자 1~8 은 칸 번호 키라 추가 키로 못 쓴다")
+    check(D.slotKeyConflict(s, tab: 0, at: 0, key: "2")?.contains("칸 번호 키") == true, "칸 번호 키와 겹침 안내")
+    checkEqual(slotKey(D.settingSlotKey(s, tab: 0, at: 0, to: "9"), 0), "9", "숫자 9 는 추가 키로 쓸 수 있다")
     checkEqual(D.settingSlotKey(s, tab: 0, at: 0, to: "q"), s, "닫기 키(Q)는 못 쓴다")
     check(D.slotKeyConflict(s, tab: 0, at: 0, key: "q")?.contains("닫기 키") == true, "닫기 키와 겹침 안내")
     checkEqual(D.settingSlotKey(s, tab: 0, at: 0, to: "-"), s, "영문자·숫자가 아니면 바꾸지 않는다")
     check(D.slotKeyConflict(s, tab: 0, at: 0, key: "가") != nil, "한글 문자는 쓸 수 없다")
-    checkEqual(slotKey(D.settingSlotKey(s, tab: 0, at: 0, to: "1"), 0), nil, "자기 기본 숫자와 같으면 저장하지 않는다")
+    check(s.tabs[0].slots.allSatisfy { $0?.key == nil }, "기본은 추가 키 없음")
     let withW = D.settingSlotKey(s, tab: 0, at: 0, to: "w")
-    checkEqual(slotKey(D.settingSlotKey(withW, tab: 0, at: 0, to: nil), 0), nil, "nil 은 기본으로 되돌림")
-    checkEqual(slotKey(D.settingSlotKey(withW, tab: 0, at: 1, to: "w"), 1), nil, "다른 슬롯이 이미 쓰는 지정 키는 못 쓴다")
-    checkEqual(D.settingSlotKey(withW, tab: 0, at: 1, to: "1").tabs[0].slots[1]?.key, "1", "비워 둔 1번 칸의 기본 숫자는 이제 2번 칸이 쓸 수 있다")
+    checkEqual(slotKey(D.settingSlotKey(withW, tab: 0, at: 0, to: nil), 0), nil, "nil 은 추가 키를 없앤다")
+    checkEqual(D.settingSlotKey(withW, tab: 0, at: 1, to: "w"), withW, "다른 슬롯이 이미 쓰는 추가 키는 못 쓴다")
+    check(D.slotKeyConflict(withW, tab: 0, at: 1, key: "w")?.contains("슬롯 1") == true, "그 키를 쓰는 슬롯을 알려 준다")
+    checkEqual(slotKey(D.settingSlotKey(withW, tab: 0, at: 1, to: "e"), 1), "e", "슬롯마다 서로 다른 추가 키")
+    checkEqual(slotKey(D.settingSlotKey(withW, tab: 0, at: 0, to: "w"), 0), "w", "자기 추가 키를 다시 고르는 것은 겹침이 아니다")
 
     checkEqual(slotDirection(D.settingSlotDirection(s, tab: 0, at: 0, to: .right), 0), .right, "방향 지정")
     checkEqual(D.settingSlotDirection(s, tab: 0, at: 0, to: .upRight), s, "다른 슬롯의 기본 방향(↗)은 못 쓴다")
@@ -305,16 +309,15 @@ private func keyAssignmentEditing() {
     check(D.slotUsingDirection(s, tab: 0, direction: SlotDirection.off, except: 0) == nil, "끈 방향은 겹쳐도 된다")
 
     checkEqual(D.settingCloseKey(s, to: "x").closeKey, "x", "닫기 키 지정")
-    checkEqual(D.settingCloseKey(s, to: "1"), s, "슬롯이 쓰는 숫자는 닫기 키로 못 쓴다")
+    checkEqual(D.settingCloseKey(s, to: "1"), s, "슬롯이 있는 칸의 번호 키는 닫기 키로 못 쓴다")
     check(D.closeKeyConflict(s, key: "1")?.contains("슬롯 1") == true, "닫기 키 겹침 안내")
+    checkEqual(D.settingCloseKey(withW, to: "w"), withW, "슬롯의 추가 키는 닫기 키로 못 쓴다")
+    check(D.closeKeyConflict(withW, key: "w")?.contains("슬롯 1") == true, "추가 키와 겹침 안내")
     checkEqual(D.settingCloseKey(s, to: "ab"), s, "형식이 맞지 않으면 바꾸지 않는다")
-    checkEqual(D.settingCloseKey(s, to: "8").closeKey, "8", "빈 칸의 기본 숫자는 닫기 키로 쓸 수 있다")
+    checkEqual(D.settingCloseKey(s, to: "8").closeKey, "8", "빈 칸의 번호 키는 닫기 키로 쓸 수 있다")
 
-    // 기본으로 되돌리는 것도 겹침 검사를 받는다: 되돌린 기본 키·방향을 다른 슬롯이 이미 쓰면 바꾸지 않는다
-    var reset = D.settingSlotKey(D.settingSlotKey(s, tab: 0, at: 0, to: "w"), tab: 0, at: 1, to: "1")
-    checkEqual(slotKey(reset, 1), "1", "1번 칸이 W 로 바뀐 사이 2번 칸이 숫자 1 을 지정")
-    checkEqual(D.settingSlotKey(reset, tab: 0, at: 0, to: nil), reset, "1번 칸을 기본(1)으로 되돌리면 2번 칸의 1 과 겹쳐 되돌리지 않는다")
-    reset = D.settingSlotDirection(D.settingSlotDirection(s, tab: 0, at: 0, to: SlotDirection.off), tab: 0, at: 1, to: .up)
+    // 방향을 기본으로 되돌리는 것도 겹침 검사를 받는다: 되돌린 기본 방향을 다른 슬롯이 이미 쓰면 바꾸지 않는다
+    let reset = D.settingSlotDirection(D.settingSlotDirection(s, tab: 0, at: 0, to: SlotDirection.off), tab: 0, at: 1, to: .up)
     checkEqual(D.settingSlotDirection(reset, tab: 0, at: 0, to: nil), reset, "1번 칸을 기본 방향(↑)으로 되돌리면 2번 칸의 ↑ 와 겹쳐 되돌리지 않는다")
 
     // 복제본은 지정한 키·방향을 이어받지 않는다(겹쳐서 저장이 막히지 않게)
@@ -1214,5 +1217,102 @@ private func focusGlowToggle() {
         model.draft.overlay.focusGlow = false
         model.resetToDefaults()
         check(model.draft.overlay.focusGlow && model.palette.glow, "초기화 → 기본(켬)")
+    }
+}
+
+private final class FakeFetcher: PageMetadataFetching, @unchecked Sendable {
+    private let lock = NSLock()
+    private var _urls: [URL] = []
+    private var _info = PageInfo(title: "GitHub Docs", hasIcon: true)
+    var urls: [URL] { lock.withLock { _urls } }
+    var info: PageInfo {
+        get { lock.withLock { _info } }
+        set { lock.withLock { _info = newValue } }
+    }
+    func fetch(_ url: URL) async -> PageInfo {
+        lock.withLock { _urls.append(url) }
+        return info
+    }
+}
+
+/// URL 슬롯에 페이지 제목을 이름·약어로 넣는 규칙과, 설정 모델의 입력 멈춤 대기·오래된 결과 무시
+private func pageTitleEditing() {
+    section("Settings: URL 슬롯 제목·파비콘")
+    func settings(url: String = "https://example.com/a", name: String = "슬롯 1") -> Settings {
+        var s = Settings()
+        s.tabs = [Tab(id: "t", name: "탭", type: .custom, slots: [Slot(id: "u1", name: name, label: nil, action: .openURL(url))])]
+        return s
+    }
+
+    let s = settings()
+    let titled = D.applyingPageTitle("  GitHub \n Docs ", url: "https://example.com/a", tab: "t", slot: "u1", expectedName: nil, to: s)
+    checkEqual(titled.tabs[0].slots[0]?.name, "GitHub Docs", "제목이 이름이 된다(공백 정리)")
+    checkEqual(titled.tabs[0].slots[0]?.label, "GD", "약어가 라벨이 된다")
+    checkEqual(D.applyingPageTitle("제목", url: "https://other.com", tab: "t", slot: "u1", expectedName: nil, to: s), s, "URL 이 바뀌었으면 바꾸지 않는다")
+    checkEqual(D.applyingPageTitle("제목", url: "https://example.com/a", tab: "t", slot: "gone", expectedName: nil, to: s), s, "슬롯이 없으면 바꾸지 않는다")
+    checkEqual(D.applyingPageTitle("제목", url: "https://example.com/a", tab: "nope", slot: "u1", expectedName: nil, to: s), s, "탭이 없으면 바꾸지 않는다")
+    checkEqual(D.applyingPageTitle("  \n ", url: "https://example.com/a", tab: "t", slot: "u1", expectedName: nil, to: s), s, "빈 제목은 바꾸지 않는다")
+    checkEqual(D.applyingPageTitle("제목", url: "https://example.com/a", tab: "t", slot: "u1", expectedName: "내 이름", to: s), s, "이름을 직접 고쳤으면 바꾸지 않는다")
+    checkEqual(D.applyingPageTitle("제목", url: "https://example.com/a", tab: "t", slot: "u1", expectedName: "슬롯 1", to: s).tabs[0].slots[0]?.name, "제목", "이름이 그대로면 바꾼다")
+    let long = D.applyingPageTitle(String(repeating: "가", count: 60), url: "https://example.com/a", tab: "t", slot: "u1", expectedName: nil, to: s)
+    checkEqual(long.tabs[0].slots[0]?.name.utf16.count, 40, "이름은 40유닛 상한")
+    checkEqual(SettingsValidator.validate(long).map(\.text), [], "제목을 넣은 설정은 유효")
+
+    MainActor.assumeIsolated {
+        let fake = FakeFetcher()
+        let store = FeedbackStore()
+        store.current = s
+        let model = SettingsModel(store: store, catalog: FeedbackCatalog(), save: { _ in .success }, checkForUpdates: {}, versionText: { "t" },
+                                  pageMetadata: fake, metadataDebounce: .milliseconds(40))
+        func pump(_ seconds: Double = 0.25, until done: () -> Bool = { false }) {
+            let deadline = Date().addingTimeInterval(seconds)
+            while Date() < deadline && !done() { RunLoop.main.run(until: Date().addingTimeInterval(0.01)) }
+        }
+        @MainActor func setURL(_ url: String) { model.draft.tabs[0].slots[0]?.action = .openURL(url) }
+        @MainActor func name() -> String? { model.draft.tabs[0].slots[0]?.name }
+
+        // 입력이 이어지면 마지막 주소로 한 번만 가져온다
+        setURL("https://example.com/ab")
+        model.slotURLChanged(tab: "t", slot: "u1", url: "https://example.com/a")
+        model.slotURLChanged(tab: "t", slot: "u1", url: "https://example.com/ab")
+        pump(2) { name() == "GitHub Docs" }
+        checkEqual(fake.urls.map(\.absoluteString), ["https://example.com/ab"], "마지막 입력만 요청한다")
+        checkEqual(name(), "GitHub Docs", "제목이 이름으로")
+        checkEqual(model.draft.tabs[0].slots[0]?.label, "GD", "약어가 라벨로")
+        checkEqual(model.iconRevision, 1, "파비콘이 저장되면 미리보기 갱신 신호")
+
+        // 미완성 주소·http(s) 가 아닌 주소는 요청하지 않는다
+        for bad in ["https://g", "https://", "ftp://a.com", "not a url", "https://localhost"] {
+            model.slotURLChanged(tab: "t", slot: "u1", url: bad)
+        }
+        pump(0.3)
+        checkEqual(fake.urls.count, 1, "호스트에 점이 없거나 http(s) 가 아니면 요청하지 않는다")
+
+        // 기다리는 사이 사용자가 이름을 고치면 이름은 그대로, 아이콘 신호는 올라간다
+        model.draft.tabs[0].slots[0]?.name = "슬롯 1"
+        setURL("https://example.com/c")
+        model.slotURLChanged(tab: "t", slot: "u1", url: "https://example.com/c")
+        model.draft.tabs[0].slots[0]?.name = "내 이름"
+        pump(2) { fake.urls.count == 2 }
+        pump(0.15)
+        checkEqual(name(), "내 이름", "직접 고친 이름은 덮어쓰지 않는다")
+        checkEqual(model.iconRevision, 2, "이름과 무관하게 아이콘은 갱신")
+
+        // 기다리는 사이 URL 이 바뀌면 오래된 결과는 버린다
+        model.draft.tabs[0].slots[0]?.name = "슬롯 1"
+        setURL("https://example.com/d")
+        model.slotURLChanged(tab: "t", slot: "u1", url: "https://example.com/d")
+        setURL("https://example.com/e")
+        pump(2) { fake.urls.count == 3 }
+        pump(0.15)
+        checkEqual(name(), "슬롯 1", "URL 이 바뀐 뒤 도착한 제목은 버린다")
+
+        // 제목을 못 읽으면 호스트 이름(www. 제외)을 쓴다
+        fake.info = PageInfo(title: nil, hasIcon: false)
+        setURL("https://www.example.org/")
+        model.slotURLChanged(tab: "t", slot: "u1", url: "https://www.example.org/")
+        pump(2) { name() == "example.org" }
+        checkEqual(name(), "example.org", "제목이 없으면 호스트 이름")
+        checkEqual(model.iconRevision, 3, "아이콘이 없으면 신호가 오르지 않는다(앞선 세 번만 반영)")
     }
 }

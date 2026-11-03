@@ -8,6 +8,13 @@ final class SystemAppCatalog: AppCatalog, @unchecked Sendable {
     /// 오래 안 쓴 순서(앞이 가장 오래됨). 상한을 넘으면 앞에서부터 버린다.
     private var iconOrder: [String] = []
     private static let iconCacheLimit = 256
+    /// URL 슬롯의 파비콘 보관소
+    private let faviconStore: FaviconStore
+
+    init(faviconStore: FaviconStore = .standard) {
+        self.faviconStore = faviconStore
+    }
+
     // MARK: - 실행 중 앱
 
     /// 일반(Dock 에 보이는) 앱만. 백그라운드 유틸·자기 자신·종료된 앱은 제외
@@ -164,17 +171,27 @@ final class SystemAppCatalog: AppCatalog, @unchecked Sendable {
 
     func iconPNG(for target: IconTarget, pixels: Int) -> Data? {
         let size = min(max(pixels, 1), 256)
-        let path: String?
+        let key: String
+        let render: () -> Data?
         switch target {
         case let .appPath(appPath):
             // open 과 같은 규칙: .app 접미사 + 존재 확인
-            path = appPath.hasSuffix(".app") && FileManager.default.fileExists(atPath: appPath) ? appPath : nil
+            guard appPath.hasSuffix(".app"), FileManager.default.fileExists(atPath: appPath) else { return nil }
+            key = "\(appPath)@\(size)"
+            render = { Self.renderIcon(path: appPath, pixels: size) }
         case let .bundleId(bundleId):
-            path = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleId)?.path
+            guard let path = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleId)?.path else { return nil }
+            key = "\(path)@\(size)"
+            render = { Self.renderIcon(path: path, pixels: size) }
+        case let .url(host):
+            // 파비콘: 저장된 PNG 를 필요한 크기로 줄인다. 아이콘이 새로 저장되면(수정 시각이 바뀌면) 캐시도 새로 만든다.
+            // 수정 시각만 매번 확인하고 파일은 캐시에 없을 때만 읽는다.
+            let revision = faviconStore.revision(forHost: host)
+            guard revision > 0 else { return nil }
+            key = "url:\(host)@\(size)#\(revision)"
+            render = { [faviconStore] in faviconStore.pngData(forHost: host).flatMap { FaviconStore.renderPNG(from: $0, pixels: size) } }
         }
-        guard let path else { return nil }
 
-        let key = "\(path)@\(size)"
         if let hit = lock.withLock({ () -> Data? in
             guard let data = iconCache[key] else { return nil }
             iconOrder.removeAll { $0 == key }
@@ -182,7 +199,7 @@ final class SystemAppCatalog: AppCatalog, @unchecked Sendable {
             return data
         }) { return hit }
 
-        guard let png = Self.renderIcon(path: path, pixels: size) else { return nil }
+        guard let png = render() else { return nil }
         lock.withLock {
             iconCache[key] = png
             iconOrder.removeAll { $0 == key }

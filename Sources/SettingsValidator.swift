@@ -76,14 +76,22 @@ enum SettingsValidator {
                 }
                 if !slotIds.insert(slot.id).inserted { slotIssue(["식별자"], "슬롯 id 중복: \(slot.id)") }
 
-                if let key = slot.key, SlotKey.normalize(key) != key { slotIssue(["키"], "영문자 또는 숫자 한 글자(소문자)여야 합니다") }
-                let key = Keymap.effectiveKey(slot, position: slotIndex)
-                if key == settings.closeKey {
-                    slotIssue(["키"], "닫기 키(\(SlotKey.display(key)))와 같습니다")
-                } else if let other = keyOwner[key] {
-                    slotIssue(["키"], "슬롯 \(other + 1) 과(와) 키가 같습니다: \(SlotKey.display(key))")
-                } else {
-                    keyOwner[key] = slotIndex
+                // 칸 번호 키(숫자 1~8)는 늘 이 칸을 고른다. 닫기 키가 그 숫자면 이 칸은 번호 키를 잃으므로 거부한다.
+                let numberKey = SlotKey.defaultKey(position: slotIndex)
+                if numberKey == settings.closeKey { slotIssue(["키"], "닫기 키(\(SlotKey.display(numberKey)))가 이 칸의 번호 키와 같습니다") }
+                // 추가 키: 영문자·숫자 한 글자, 숫자 1~8 과 닫기 키는 못 쓰고, 같은 탭의 다른 슬롯과 겹치면 안 된다
+                if let key = slot.key {
+                    if SlotKey.normalize(key) != key {
+                        slotIssue(["추가 키"], "영문자 또는 숫자 한 글자(소문자)여야 합니다")
+                    } else if SlotKey.isPositionDigit(key) {
+                        slotIssue(["추가 키"], "숫자 1~8 은 칸 번호 키로 이미 쓰입니다")
+                    } else if key == settings.closeKey {
+                        slotIssue(["추가 키"], "닫기 키(\(SlotKey.display(key)))와 같습니다")
+                    } else if let other = keyOwner[key] {
+                        slotIssue(["추가 키"], "슬롯 \(other + 1) 과(와) 추가 키가 같습니다: \(SlotKey.display(key))")
+                    } else {
+                        keyOwner[key] = slotIndex
+                    }
                 }
                 let direction = Keymap.effectiveDirection(slot, position: slotIndex)
                 if direction != .off {

@@ -33,13 +33,16 @@ final class Deck: DeckProviding, @unchecked Sendable {
         self.writeClipboard = writeClipboard
     }
 
-    /// 슬롯 대상 앱의 식별자. 매크로 안의 단계는 슬롯 자체가 앱이 아니므로 제외한다.
+    /// 슬롯 대상의 아이콘 식별자: 앱은 앱 아이콘, http/https URL 은 그 호스트의 파비콘. 매크로 안의 단계는 슬롯 자체가 대상이 아니므로 제외한다.
     static func iconTarget(for action: Action) -> IconTarget? {
         switch action {
         case let .activateApp(bundleId, _): return .bundleId(bundleId)
         case let .launchApp(bundleId, appPath):
             if let appPath { return .appPath(appPath) }
             return bundleId.map(IconTarget.bundleId)
+        case let .openURL(value):
+            guard isHttpURL(value), let host = URL(string: value)?.host else { return nil }
+            return .url(host.lowercased())
         default: return nil
         }
     }
@@ -91,7 +94,8 @@ final class Deck: DeckProviding, @unchecked Sendable {
     func prewarm() {
         let settings = store.current
         guard settings.overlay.showIcons else { return }
-        fetchIcons(settings.tabs.flatMap { $0.slots.compactMap { $0.flatMap { Self.iconTarget(for: $0.action) } } })
+        // 파비콘은 같은 호스트에서 새로 받아 바뀔 수 있으므로 저장·다시 불러올 때마다 다시 읽는다(카탈로그가 수정 시각으로 캐시를 관리해 싸다)
+        fetchIcons(settings.tabs.flatMap { $0.slots.compactMap { $0.flatMap { Self.iconTarget(for: $0.action) } } }, refreshingURLs: true)
     }
 
     /// 지금까지 요청한 아이콘 작업이 모두 끝날 때까지 기다린다(종료 정리와 테스트용)
@@ -101,11 +105,14 @@ final class Deck: DeckProviding, @unchecked Sendable {
         }
     }
 
-    /// 캐시에 없고 진행 중도 아닌 대상만 요청한다. 못 얻으면 약어로 남기고, 다음 표시에서 다시 시도한다.
-    private func fetchIcons(_ targets: [IconTarget]) {
+    /// 캐시에 없고 진행 중도 아닌 대상만 요청한다(`refreshingURLs` 면 캐시에 있는 URL 파비콘도 다시 읽는다). 못 얻으면 약어로 남기고, 다음 표시에서 다시 시도한다.
+    private func fetchIcons(_ targets: [IconTarget], refreshingURLs: Bool = false) {
         let missing = lock.withLock { () -> [IconTarget] in
             var out: [IconTarget] = []
-            for target in targets where icons[target] == nil && !inFlight.contains(target) {
+            for target in targets where !inFlight.contains(target) {
+                var wanted = icons[target] == nil
+                if refreshingURLs, case .url = target { wanted = true }
+                guard wanted else { continue }
                 inFlight.insert(target)
                 out.append(target)
             }

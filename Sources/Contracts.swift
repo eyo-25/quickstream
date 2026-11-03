@@ -29,6 +29,8 @@ struct InstalledApp: Equatable, Hashable, Identifiable {
 enum IconTarget: Hashable {
     case bundleId(String)
     case appPath(String)
+    /// URL 슬롯의 파비콘(호스트 이름). `FaviconStore` 에 저장된 것을 쓴다.
+    case url(String)
 }
 
 /// 앱 실행/전환/조회 (NSWorkspace). 구현: Core

@@ -265,6 +265,8 @@ final class OverlayModel: ObservableObject {
     @discardableResult
     func handleKeyDown(_ event: OverlayKeyEvent) -> Bool {
         guard let tab, let action = overlayKeyAction(event, closeKeyCodes: state?.closeKeyCodes ?? [KeyCode.q]) else { return false }
+        // 꾹 눌러 반복되는 입력(.swallow)이라도 아무 칸에도 배정되지 않은 글자·숫자 키는 처리하지 않는다(기본 동작을 그대로 둔다)
+        if action == .swallow, SlotKey.character(forKeyCode: event.keyCode) != nil, tab.keymap.keys[event.keyCode] == nil { return false }
         switch action {
         case .close:
             onClose?(true)

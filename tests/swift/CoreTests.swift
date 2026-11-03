@@ -95,7 +95,7 @@ private func slot(_ id: String, _ action: Action = .openURL("https://example.com
 }
 
 /// 고정 앱 탭 하나를 가진 설정
-private func settings(slots: [Slot]) -> Settings {
+private func settings(slots: [Slot?]) -> Settings {
     var s = Settings.defaults
     s.tabs[0].slots = slots
     return s
@@ -195,11 +195,21 @@ private func testValidator() {
     let tooMany = SettingsValidator.validate(s).first { $0.text.contains("슬롯: 항목이 너무 많습니다") }
     checkEqual(tooMany?.tabIndex, 0, "슬롯 9개 → 탭 위치")
     checkEqual(tooMany?.slotIndex, nil, "슬롯 9개 → 슬롯 위치 없음")
+    // 끝의 빈 칸(null)은 저장 때 떨어지므로 슬롯 수로 세지 않는다. 8번째 이후에 슬롯이 있을 때만 거부한다.
+    s = settings(slots: (0..<8).map { slot("s\($0)") } + [nil, nil])
+    checkEqual(issues(s), [], "끝의 빈 칸 null 은 슬롯 수에 넣지 않는다")
+    s = settings(slots: [slot("a")] + [Slot?](repeating: nil, count: 8) + [slot("b")])
+    check(hasIssue(s, containing: "슬롯: 항목이 너무 많습니다"), "9번째 칸 이후의 슬롯은 거부")
 
     s = settings(slots: [slot("a"), slot("a")])
     let dup = SettingsValidator.validate(s).first
     checkEqual(dup?.text, "탭 \"고정 앱\" > 슬롯 2 > 식별자: 슬롯 id 중복: a", "슬롯 id 중복 문구")
     checkEqual(dup?.slotIndex, 1, "슬롯 id 중복 위치")
+    // 빈 칸이 있어도 이슈의 슬롯 위치는 링 위치(0부터)다: 12시, 비어 있음 ×2, 슬롯 4번 칸의 id 중복
+    s = settings(slots: [slot("a"), nil, nil, slot("a")])
+    let gapDup = SettingsValidator.validate(s).first
+    checkEqual(gapDup?.text, "탭 \"고정 앱\" > 슬롯 4 > 식별자: 슬롯 id 중복: a", "빈 칸 뒤 슬롯의 번호는 링 위치")
+    checkEqual(gapDup?.slotIndex, 3, "빈 칸 뒤 슬롯의 이슈 위치")
     // 다른 탭이면 같은 슬롯 id 허용
     s = .defaults
     s.tabs[0].slots = [slot("a")]
@@ -329,7 +339,7 @@ private func testActionJSON(_ root: URL) {
     if let parsed = try? decoder.decode(Settings.self, from: Data(legacyJSON.utf8)) {
         checkEqual(parsed.tabs.map(\.id), ["pinned"], "옛 recent-apps 탭은 읽을 때 버림")
         checkEqual(parsed.tabs[0].slots.count, 3, "옛 형식 슬롯 수")
-        checkEqual(parsed.tabs[0].slots[2].action, .macroSequence(stopOnError: true, steps: [.launchApp(bundleId: nil, appPath: "/Applications/Safari.app"), .clipboardText("hi")]), "옛 형식 매크로")
+        checkEqual(parsed.tabs[0].slots[2]?.action, .macroSequence(stopOnError: true, steps: [.launchApp(bundleId: nil, appPath: "/Applications/Safari.app"), .clipboardText("hi")]), "옛 형식 매크로")
     } else {
         check(false, "옛 형식 JSON 디코드")
     }
@@ -453,7 +463,7 @@ private func testMigration(_ root: URL) {
         let newDir = root.appendingPathComponent("new-\(UUID().uuidString)", isDirectory: true)
         let store = SettingsStore(directory: newDir, legacyAppSupport: appSupport)
         checkEqual(store.warning, nil, "\(label): 가져오기 경고 없음")
-        checkEqual(store.current.tabs[0].slots.map(\.id), ["memo", "site", "macro"], "\(label): 옛 설정을 가져옴")
+        checkEqual(store.current.tabs[0].slots.compactMap { $0?.id }, ["memo", "site", "macro"], "\(label): 옛 설정을 가져옴")
         checkEqual(store.current.overlay.radius, 28, "\(label): 옛 모양 값을 가져옴")
         check(fm.fileExists(atPath: store.fileURL.path), "\(label): 새 파일로 저장")
         checkEqual(SettingsStore(directory: newDir, legacyAppSupport: nil).current, store.current, "\(label): 새 파일에서 다시 읽힘")
@@ -670,6 +680,22 @@ private func testDeck(_ root: URL) async {
         await deck.waitForIconWork()
         checkEqual(catalog.iconRequests, [], "showIcons=false 면 아이콘을 요청하지 않음")
         check(state.tabs.flatMap { $0.slots }.allSatisfy { $0?.iconPNG == nil }, "showIcons=false 면 아이콘 없음")
+    }
+
+    // 빈 칸이 있는 탭: 슬롯은 자기 링 위치에 있고(뒤 슬롯이 당겨지지 않는다), 실행도 그 위치로 간다
+    do {
+        var s = Settings.defaults
+        s.tabs[0].slots = [slot("a", .clipboardText("12시")), nil, nil, nil, slot("b", .clipboardText("6시"))]
+        let fx = Effects()
+        let deck = Deck(store: makeStore(s), catalog: FakeCatalog(), openURL: { fx.opened.append($0) }, writeClipboard: { fx.clipboard.append($0) })
+        let state = await deck.buildState()
+        checkEqual(state.tabs[0].slots.map { $0?.id }, ["a", nil, nil, nil, "b", nil, nil, nil], "빈 칸은 nil 로 남고 슬롯은 자기 링 위치에 선다")
+        checkEqual(deck.action(tabId: "pinned", slotIndex: 4), .clipboardText("6시"), "6시 칸의 동작")
+        check(deck.action(tabId: "pinned", slotIndex: 1) == nil, "빈 칸은 동작이 없다")
+        _ = await deck.execute(tabId: "pinned", slotIndex: 4)
+        checkEqual(fx.clipboard, ["6시"], "5번 칸 실행은 6시 슬롯의 동작")
+        let emptyRun = await deck.execute(tabId: "pinned", slotIndex: 1)
+        check(!emptyRun.ok, "빈 칸 실행은 실패")
     }
 
     // commit 의미: 이미 보낸 상태의 실행 조회표는 설정이 바뀌어도 그대로

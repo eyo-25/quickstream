@@ -112,7 +112,8 @@ final class OverlayController: NSObject, NSWindowDelegate {
                 panel.animator().alphaValue = 1
             }
         }
-        NSApp.activate(ignoringOtherApps: true)
+        // 앱 전체를 활성화하지 않는다: `activate` 는 이 앱의 모든 창을 앞으로 올려, 다른 앱 뒤에 있던 설정 창이 오버레이와 함께 올라온다.
+        // 패널이 nonactivatingPanel 이라 활성화 없이도 키 창이 되어 키 입력을 받고, 앞에 있던 앱은 앞에 그대로 남는다.
         panel.makeKeyAndOrderFront(nil)
         if animate {
             NSAnimationContext.runAnimationGroup { context in

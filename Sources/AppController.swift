@@ -53,8 +53,6 @@ final class AppController: NSObject, NSMenuDelegate {
         overlay.hidesOnResign = !CommandLine.arguments.contains("--keep-open")
 
         applyStoredSettings()
-        // 처음 보는 앱이 첫 표시에서 약어로 나오지 않게, 설정에 있는 앱의 아이콘을 미리 받아 둔다
-        deck.prewarm()
 
         // 메뉴와 열려 있는 정보 화면이 함께 갱신된다(정보 화면은 body 에서 상태 문구를 읽으므로 변경을 알려 줘야 다시 그린다).
         updater.onStatusChange = { [weak self] _ in
@@ -83,6 +81,8 @@ final class AppController: NSObject, NSMenuDelegate {
     func applyStoredSettings() {
         let settings = store.reload()
         setStatus("config", store.warning)
+        // 처음 보는 앱이 첫 표시에서 약어로 나오지 않게, 설정에 있는 앱의 아이콘을 미리 받아 둔다(시작·다시 불러오기 때마다)
+        deck.prewarm()
 
         // 녹화 중이면 등록하지 않는다(녹화가 끝날 때 store.current 로 등록된다)
         if !shortcutRecording { registerStoredShortcut() }
@@ -124,9 +124,10 @@ final class AppController: NSObject, NSMenuDelegate {
         showGeneration += 1
         let generation = showGeneration
         showing = true
-        // 오버레이가 앱을 활성화하기 전에 앞에 있던 앱을 잡는다. 이미 보이는 오버레이를 다시 열면 자기 자신이 앞이라 nil → 이전 기록을 유지한다.
+        // 오버레이는 앱을 활성화하지 않으므로 `NSApp.isActive` 는 설정 창이 맨 앞인지 알려 주지 못한다(다른 앱 뒤에 있어도 true 일 수 있다).
+        // 시스템 기준 맨 앞 앱으로 본다: 퀵스트림 자신이 앞이면 `frontmostApp()` 이 nil 이다. 이미 보이는 오버레이를 다시 열어도 nil → 이전 기록을 유지한다.
         let frontmost = catalog.frontmostApp()
-        let settingsFront = NSApp.isActive && settingsWindow?.window?.isKeyWindow == true
+        let settingsFront = frontmost == nil && settingsWindow?.window?.isKeyWindow == true
         Task { @MainActor [self] in
             let state = await deck.buildState()
             guard generation == showGeneration else { return } // 그 사이 닫기/재호출이 있었다
@@ -239,6 +240,8 @@ final class AppController: NSObject, NSMenuDelegate {
             return saved
         }
         setStatus("config", nil) // 이제 디스크 파일은 유효하다
+        // 새로 등록·변경한 앱의 아이콘을 다음 표시 전에 확보한다. 안 그러면 첫 표시에는 약어만 나오고 아이콘은 그다음 표시부터 붙는다.
+        deck.prewarm()
         if rollbackShortcut != nil { setStatus("shortcut", nil) }
         if rollbackLogin != nil { setStatus("loginItem", nil) }
         return .success

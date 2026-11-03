@@ -54,7 +54,8 @@ final class Deck: DeckProviding, @unchecked Sendable {
             var views = [SlotView?](repeating: nil, count: Limits.slots)
             var actions = [Action?](repeating: nil, count: Limits.slots)
 
-            for (i, slot) in tab.slots.prefix(Limits.slots).enumerated() {
+            for (i, entry) in tab.slots.prefix(Limits.slots).enumerated() {
+                guard let slot = entry else { continue } // 빈 칸
                 actions[i] = slot.action
                 views[i] = SlotView(id: slot.id, name: slot.name, label: slot.label ?? slotInitials(slot.name), verb: slot.action.verb)
                 if let target = Self.iconTarget(for: slot.action) { iconSlots.append((tabIndex, i, target)) }
@@ -89,7 +90,7 @@ final class Deck: DeckProviding, @unchecked Sendable {
     func prewarm() {
         let settings = store.current
         guard settings.overlay.showIcons else { return }
-        fetchIcons(settings.tabs.flatMap { $0.slots.compactMap { Self.iconTarget(for: $0.action) } })
+        fetchIcons(settings.tabs.flatMap { $0.slots.compactMap { $0.flatMap { Self.iconTarget(for: $0.action) } } })
     }
 
     /// 지금까지 요청한 아이콘 작업이 모두 끝날 때까지 기다린다(종료 정리와 테스트용)

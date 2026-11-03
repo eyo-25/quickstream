@@ -50,10 +50,12 @@ enum SettingsValidator {
             if !isValidTabId(tab.id) { tabIssue("식별자", "탭 id 는 영문/숫자/-/_ 1~32자") }
             if !(1...20).contains(tab.name.utf16.count) { tabIssue("이름", tab.name.isEmpty ? Message.empty : Message.tooLong) }
             if !tabIds.insert(tab.id).inserted { tabIssue("식별자", "탭 id 중복: \(tab.id)") }
-            if tab.slots.count > Limits.slots { tabIssue("슬롯", Message.tooManyItems) }
+            // 끝의 빈 칸(null)은 저장 때 떨어지므로 마지막으로 채워진 칸이 8번째 이후인지만 본다
+            if (tab.slots.lastIndex { $0 != nil } ?? -1) >= Limits.slots { tabIssue("슬롯", Message.tooManyItems) }
 
             var slotIds = Set<String>()
             for (slotIndex, slot) in tab.slots.enumerated() {
+                guard let slot else { continue } // 빈 칸
                 let prefix = "\(tabLabel) > 슬롯 \(slotIndex + 1)"
 
                 func slotIssue(_ parts: [String], _ message: String) {

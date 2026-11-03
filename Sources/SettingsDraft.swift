@@ -129,8 +129,8 @@ enum SettingsDraft {
         copy.id = newId("tab", taken: s.tabs.map(\.id))
         copy.name = String("\(copy.name) 복사".prefix(20))
         var slotIds: [String] = []
-        copy.slots = copy.slots.map { slot in
-            var c = slot
+        copy.slots = copy.slots.map { (slot: Slot?) -> Slot? in
+            guard var c = slot else { return nil }
             c.id = newId("slot", taken: slotIds)
             slotIds.append(c.id)
             return c
@@ -147,50 +147,87 @@ enum SettingsDraft {
         return next
     }
 
-    // MARK: 슬롯
+    // MARK: 슬롯 (링 위치 8칸 고정, 빈 칸 허용)
 
-    private static func editSlots(_ s: Settings, _ tabIndex: Int, _ body: (inout [Slot]) -> Void) -> Settings {
+    /// 탭의 슬롯을 링 위치(0 = 12시, 시계 방향) 8칸으로 펼친다. 빈 칸은 nil.
+    static func cells(_ tab: Tab) -> [Slot?] {
+        let padded = tab.slots + [Slot?](repeating: nil, count: max(0, Limits.slots - tab.slots.count))
+        return Array(padded.prefix(max(Limits.slots, tab.slots.count)))
+    }
+
+    /// 칸을 고쳐 돌려준다. 끝의 빈 칸은 떼어 저장 형태와 같게 둔다.
+    private static func editCells(_ s: Settings, _ tabIndex: Int, _ body: (inout [Slot?]) -> Void) -> Settings {
         guard s.tabs.indices.contains(tabIndex) else { return s }
         var next = s
-        body(&next.tabs[tabIndex].slots)
+        var list = cells(s.tabs[tabIndex])
+        body(&list)
+        while list.last.map({ $0 == nil }) == true { list.removeLast() }
+        next.tabs[tabIndex].slots = list
         return next
     }
 
+    private static func isEmptyCell(_ tab: Tab, _ position: Int) -> Bool {
+        (0..<Limits.slots).contains(position) && (position >= tab.slots.count || tab.slots[position] == nil)
+    }
+
+    /// 가장 앞의 빈 칸 위치(없으면 nil)
+    static func firstEmptyPosition(_ tab: Tab) -> Int? {
+        (0..<Limits.slots).first { isEmptyCell(tab, $0) }
+    }
+
     static func canAddSlot(_ s: Settings, tab tabIndex: Int) -> Bool {
-        s.tabs.indices.contains(tabIndex) && s.tabs[tabIndex].slots.count < Limits.slots
+        s.tabs.indices.contains(tabIndex) && firstEmptyPosition(s.tabs[tabIndex]) != nil
     }
 
-    /// 새 슬롯: 기본 이름 "슬롯 N" + 빈 앱 액션(사용자가 채워야 검증을 통과한다)
-    static func addSlot(_ s: Settings, tab tabIndex: Int) -> Settings {
-        guard canAddSlot(s, tab: tabIndex) else { return s }
-        return editSlots(s, tabIndex) { slots in
-            slots.append(Slot(id: newId("slot", taken: slots.map(\.id)), name: "슬롯 \(slots.count + 1)", label: nil, action: defaultAction(.launchApp)))
+    /// 새 슬롯: 기본 이름 "슬롯 N"(N = 링 위치 번호) + 빈 앱 액션(사용자가 채워야 검증을 통과한다).
+    /// `position` 을 안 주면 가장 앞의 빈 칸에 넣고, 준 칸이 비어 있지 않으면 바꾸지 않는다.
+    static func addSlot(_ s: Settings, tab tabIndex: Int, at position: Int? = nil) -> Settings {
+        guard s.tabs.indices.contains(tabIndex) else { return s }
+        let tab = s.tabs[tabIndex]
+        guard let target = position ?? firstEmptyPosition(tab), isEmptyCell(tab, target) else { return s }
+        return editCells(s, tabIndex) { list in
+            let taken = list.compactMap { $0?.id }
+            list[target] = Slot(id: newId("slot", taken: taken), name: "슬롯 \(target + 1)", label: nil, action: defaultAction(.launchApp))
         }
     }
 
-    static func removeSlot(_ s: Settings, tab tabIndex: Int, at slotIndex: Int) -> Settings {
-        editSlots(s, tabIndex) { slots in
-            if slots.indices.contains(slotIndex) { slots.remove(at: slotIndex) }
+    /// 칸을 비운다(다른 칸은 그대로 — 뒤 슬롯이 당겨지지 않는다)
+    static func removeSlot(_ s: Settings, tab tabIndex: Int, at position: Int) -> Settings {
+        editCells(s, tabIndex) { list in
+            if list.indices.contains(position) { list[position] = nil }
         }
     }
 
-    static func moveSlot(_ s: Settings, tab tabIndex: Int, at slotIndex: Int, by delta: Int) -> Settings {
-        editSlots(s, tabIndex) { $0 = moved($0, slotIndex, delta) }
+    /// 드래그로 슬롯 옮기기: 빈 칸이면 그 칸으로 옮기고, 찬 칸이면 둘을 맞바꾼다. 출발 칸이 비었거나 같은 칸이면 바꾸지 않는다.
+    static func moveSlot(_ s: Settings, tab tabIndex: Int, from: Int, to: Int) -> Settings {
+        guard s.tabs.indices.contains(tabIndex), from != to,
+              (0..<Limits.slots).contains(from), (0..<Limits.slots).contains(to),
+              !isEmptyCell(s.tabs[tabIndex], from) else { return s }
+        return editCells(s, tabIndex) { list in list.swapAt(from, to) }
     }
 
-    /// 슬롯 복제: 원본 바로 뒤에 새 id 로 삽입. 8개면 불가.
-    static func duplicateSlot(_ s: Settings, tab tabIndex: Int, at slotIndex: Int) -> Settings {
-        guard canAddSlot(s, tab: tabIndex), s.tabs[tabIndex].slots.indices.contains(slotIndex) else { return s }
-        return editSlots(s, tabIndex) { slots in
-            var copy = slots[slotIndex]
-            copy.id = newId("slot", taken: slots.map(\.id))
-            slots.insert(copy, at: slotIndex + 1)
+    /// 슬롯 복제본이 들어갈 칸: `position` 다음의 빈 칸(끝까지 가서 없으면 처음부터). 복제할 슬롯이 없거나 빈 칸이 없으면 nil.
+    static func duplicateTarget(_ tab: Tab, at position: Int) -> Int? {
+        guard (0..<Limits.slots).contains(position), !isEmptyCell(tab, position) else { return nil }
+        let order = Array((position + 1)..<Limits.slots) + Array(0..<position)
+        return order.first { isEmptyCell(tab, $0) }
+    }
+
+    /// 슬롯 복제: 새 id 로 `duplicateTarget` 칸에 넣는다. 빈 칸이 없으면 불가.
+    static func duplicateSlot(_ s: Settings, tab tabIndex: Int, at position: Int) -> Settings {
+        guard s.tabs.indices.contains(tabIndex), let target = duplicateTarget(s.tabs[tabIndex], at: position) else { return s }
+        return editCells(s, tabIndex) { list in
+            guard var copy = list[position] else { return }
+            copy.id = newId("slot", taken: list.compactMap { $0?.id })
+            list[target] = copy
         }
     }
 
-    static func updateSlot(_ s: Settings, tab tabIndex: Int, at slotIndex: Int, _ body: (inout Slot) -> Void) -> Settings {
-        editSlots(s, tabIndex) { slots in
-            if slots.indices.contains(slotIndex) { body(&slots[slotIndex]) }
+    static func updateSlot(_ s: Settings, tab tabIndex: Int, at position: Int, _ body: (inout Slot) -> Void) -> Settings {
+        editCells(s, tabIndex) { list in
+            guard list.indices.contains(position), var slot = list[position] else { return }
+            body(&slot)
+            list[position] = slot
         }
     }
 

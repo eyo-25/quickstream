@@ -57,6 +57,8 @@ final class SettingsModel: ObservableObject {
     @Published var selectedSlot = 0
     /// 사이드바에서 탭을 끌어 놓을 때 지금 올려 둔 대상 탭 id(놓을 자리 표시선용). 화면 상태라 모델이 쥔다.
     @Published var tabDropTarget: String?
+    /// 슬롯 목록에서 슬롯을 끌어 놓을 때 지금 올려 둔 칸 번호(놓을 자리 표시용). 화면 상태라 모델이 쥔다.
+    @Published var slotDropTarget: Int?
     /// 단축키 녹화 중 안내 문구
     @Published var recorderHint: String?
     private(set) var isRecordingShortcut = false

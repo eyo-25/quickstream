@@ -92,18 +92,18 @@ struct PiePreview: View {
     var hubPulse: HubPulseSource = .off
 
     /// `showIcons` 가 켜져 있을 때 슬롯 대상 앱의 아이콘을 카탈로그에서 가져온다(카탈로그가 캐시한다). 못 얻으면 nil → 약어.
-    static func icons(for slots: [Slot], showIcons: Bool, catalog: AppCatalog, pixels: Int = 112) -> [NSImage?] {
+    static func icons(for slots: [Slot?], showIcons: Bool, catalog: AppCatalog, pixels: Int = 112) -> [NSImage?] {
         (0..<PieGeometry.slots).map { i in
-            guard showIcons, slots.indices.contains(i), let target = Deck.iconTarget(for: slots[i].action),
+            guard showIcons, slots.indices.contains(i), let slot = slots[i], let target = Deck.iconTarget(for: slot.action),
                   let png = catalog.iconPNG(for: target, pixels: pixels) else { return nil }
             return NSImage(data: png)
         }
     }
 
-    init(slots: [Slot], icons: [NSImage?] = [], selected: Int, invalid: Set<Int> = [], style: PiePreviewStyle, maxSize: CGFloat, referenceRing: Int, onSelect: ((Int) -> Void)? = nil) {
+    init(slots: [Slot?], icons: [NSImage?] = [], selected: Int, invalid: Set<Int> = [], style: PiePreviewStyle, maxSize: CGFloat, referenceRing: Int, onSelect: ((Int) -> Void)? = nil) {
         self.icons = (0..<PieGeometry.slots).map { icons.indices.contains($0) ? icons[$0] : nil }
-        labels = (0..<PieGeometry.slots).map { slots.indices.contains($0) ? SettingsDraft.displayLabel(slots[$0]) : nil }
-        names = (0..<PieGeometry.slots).map { slots.indices.contains($0) ? slots[$0].name : nil }
+        labels = (0..<PieGeometry.slots).map { i -> String? in slots.indices.contains(i) ? slots[i].map { SettingsDraft.displayLabel($0) } : nil }
+        names = (0..<PieGeometry.slots).map { i -> String? in slots.indices.contains(i) ? slots[i]?.name : nil }
         self.selected = selected
         self.invalid = invalid
         self.style = style

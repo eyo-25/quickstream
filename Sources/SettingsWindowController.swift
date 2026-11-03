@@ -16,7 +16,9 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         let window = NSWindow(contentViewController: host)
         window.title = "퀵스트림 설정"
         window.styleMask = [.titled, .closable, .miniaturizable, .resizable]
-        window.setContentSize(NSSize(width: 960, height: 680))
+        // 기본 높이: 한 화면에 더 많이 보이도록 높이되(680 → 860), 작은 화면에서는 보이는 영역(제목 표시줄·여백 포함)에 맞춰 줄인다. 최소 높이 아래로는 줄이지 않는다.
+        let contentHeight = min(860, max(560, (NSScreen.main?.visibleFrame.height ?? 900) - 80))
+        window.setContentSize(NSSize(width: 960, height: contentHeight))
         window.contentMinSize = NSSize(width: 820, height: 560)
         window.appearance = NSAppearance(named: .darkAqua)
         // 시스템의 확대 팝인/축소 연출을 끈다(열 때·닫을 때 즉시 나타나고 사라진다)

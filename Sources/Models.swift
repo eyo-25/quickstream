@@ -135,10 +135,10 @@ struct Tab: Codable, Equatable, Identifiable {
     var id: String
     var name: String
     var type: TabKind
-    /// 슬롯(배열 인덱스 = 링 위치, 12시부터 시계 방향, 최대 8)
-    var slots: [Slot]
+    /// 슬롯. 배열 인덱스 = 링 위치(12시부터 시계 방향, 0~7)이고 `nil` 은 빈 칸이라 중간이 비어 있어도 된다. 저장할 때 끝의 빈 칸은 뺀다.
+    var slots: [Slot?]
 
-    init(id: String, name: String, type: TabKind, slots: [Slot] = []) {
+    init(id: String, name: String, type: TabKind, slots: [Slot?] = []) {
         self.id = id
         self.name = name
         self.type = type
@@ -152,7 +152,7 @@ struct Tab: Codable, Equatable, Identifiable {
         id = try c.decode(String.self, forKey: .id)
         name = try c.decode(String.self, forKey: .name)
         type = try c.decode(TabKind.self, forKey: .type)
-        slots = try c.decodeIfPresent([Slot].self, forKey: .slots) ?? []
+        slots = try c.decodeIfPresent([Slot?].self, forKey: .slots) ?? []
     }
 
     func encode(to encoder: Encoder) throws {
@@ -160,7 +160,8 @@ struct Tab: Codable, Equatable, Identifiable {
         try c.encode(id, forKey: .id)
         try c.encode(name, forKey: .name)
         try c.encode(type, forKey: .type)
-        try c.encode(slots, forKey: .slots)
+        // 끝의 빈 칸은 저장하지 않는다(`[슬롯, null, null, 슬롯]` 처럼 중간 빈 칸만 `null` 로 남는다)
+        try c.encode(Array(slots.reversed().drop { $0 == nil }.reversed()), forKey: .slots)
     }
 }
 

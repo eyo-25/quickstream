@@ -32,8 +32,11 @@ private func isGeneratedId(_ id: String, _ prefix: String) -> Bool {
     return tail.count == 6 && tail.allSatisfy { $0.isASCII && ($0.isLowercase || $0.isNumber) }
 }
 
-private func slots(_ s: Settings, _ tab: Int) -> [Slot] { s.tabs[tab].slots }
-private func allIds(_ s: Settings) -> [String] { s.tabs.flatMap { [$0.id] + $0.slots.map(\.id) } }
+/// 채워진 슬롯만 링 위치 순서로
+private func slots(_ s: Settings, _ tab: Int) -> [Slot] { s.tabs[tab].slots.compactMap { $0 } }
+/// 링 위치 8칸(빈 칸은 nil)
+private func cells(_ s: Settings, _ tab: Int) -> [Slot?] { D.cells(s.tabs[tab]) }
+private func allIds(_ s: Settings) -> [String] { s.tabs.flatMap { [$0.id] + $0.slots.compactMap { $0?.id } } }
 
 private func calculator() -> InstalledApp {
     InstalledApp(bundleId: "com.apple.calculator", name: "계산기", altName: "Calculator", appPath: "/System/Applications/Calculator.app")
@@ -90,10 +93,10 @@ private func tabEditing() {
     checkEqual(dup.tabs.count, 4, "복제는 탭을 하나 늘린다")
     checkEqual(dup.tabs[3].name, "회의용 퀵 복사", "복제본은 원본 바로 뒤, 이름에 ' 복사'")
     checkEqual(Set(allIds(dup)).count, allIds(dup).count, "복제 후 탭/슬롯 id 가 모두 유일")
-    checkEqual(dup.tabs[3].slots.map(\.name), base.tabs[2].slots.map(\.name), "복제본 슬롯 내용은 같다")
+    checkEqual(slots(dup, 3).map(\.name), slots(base, 2).map(\.name), "복제본 슬롯 내용은 같다")
     var edited = dup
-    edited.tabs[3].slots[0].name = "바뀜"
-    checkEqual(edited.tabs[2].slots[0].name, "구글", "복제본 편집이 원본에 영향 없음")
+    edited.tabs[3].slots[0]?.name = "바뀜"
+    checkEqual(edited.tabs[2].slots[0]?.name, "구글", "복제본 편집이 원본에 영향 없음")
     var long = base
     long.tabs[2].name = String(repeating: "가", count: 20)
     checkEqual(D.duplicateTab(long, at: 2).tabs[3].name.count, 20, "복제 이름은 20자 상한")
@@ -149,28 +152,63 @@ private func slotEditing() {
     checkEqual(slots(s, t).count, 8, "슬롯은 8개까지만")
     checkEqual(Set(slots(s, t).map(\.id)).count, 8, "슬롯 id 유일")
     check(slots(s, t).allSatisfy { isGeneratedId($0.id, "slot") }, "슬롯 id 형식")
-    checkEqual(slots(s, t).first?.name, "슬롯 1", "기본 이름은 슬롯 N")
+    checkEqual(slots(s, t).first?.name, "슬롯 1", "기본 이름은 슬롯 N(N = 링 위치 번호)")
     checkEqual(D.duplicateSlot(s, tab: t, at: 0), s, "가득 차면 슬롯 복제 불가")
     check(!D.canAddSlot(s, tab: t), "가득 차면 추가 불가")
 
-    let base = fixture()
+    // 중간이 비어도 된다: 12시와 6시만
+    var sparse = D.addSlot(D.addSlot(Settings.defaults, tab: 0, at: 0), tab: 0, at: 4)
+    checkEqual(cells(sparse, 0).map { $0 != nil }, [true, false, false, false, true, false, false, false], "12시(1번)와 6시(5번)만 채움")
+    checkEqual(cells(sparse, 0)[4]?.name, "슬롯 5", "기본 이름은 링 위치 번호")
+    checkEqual(sparse.tabs[0].slots.count, 5, "끝의 빈 칸은 저장 형태에서 뺀다")
+    checkEqual(D.addSlot(sparse, tab: 0, at: 4), sparse, "슬롯이 있는 칸에는 추가 불가")
+    checkEqual(D.addSlot(sparse, tab: 0, at: 8), sparse, "범위 밖 칸에는 추가 불가")
+    checkEqual(cells(D.addSlot(sparse, tab: 0), 0)[1]?.name, "슬롯 2", "위치를 안 주면 가장 앞의 빈 칸")
+    let tabJSON = try! JSONEncoder().encode(sparse.tabs[0])
+    check(String(data: tabJSON, encoding: .utf8)?.contains("null") == true, "중간 빈 칸은 null 로 저장")
+    checkEqual(try! JSONDecoder().decode(Tab.self, from: tabJSON), sparse.tabs[0], "빈 칸이 있는 탭의 저장 왕복")
+    let denseJSON = #"{"id":"t","name":"탭","type":"custom","slots":[{"id":"a","name":"A","action":{"type":"open_url","url":"https://a.example"}}]}"#
+    checkEqual(try! JSONDecoder().decode(Tab.self, from: Data(denseJSON.utf8)).slots.map { $0?.id }, ["a"], "예전 형식(빈 칸 없는 배열)은 앞 칸부터 그대로 읽는다")
+    checkEqual(slots(D.removeSlot(sparse, tab: 0, at: 0), 0).map(\.name), ["슬롯 5"], "삭제는 그 칸만 비운다")
+    check(cells(D.removeSlot(sparse, tab: 0, at: 0), 0)[4] != nil, "삭제해도 뒤 슬롯이 당겨지지 않는다")
 
+    // 드래그: 빈 칸으로 옮기기 / 찬 칸과 맞바꾸기
+    let movedToEmpty = D.moveSlot(sparse, tab: 0, from: 0, to: 2)
+    checkEqual(cells(movedToEmpty, 0).map { $0 != nil }, [false, false, true, false, true, false, false, false], "빈 칸으로 옮김")
+    checkEqual(cells(movedToEmpty, 0)[2]?.id, cells(sparse, 0)[0]?.id, "옮긴 슬롯은 그대로(id 유지)")
+    let swapped = D.moveSlot(sparse, tab: 0, from: 0, to: 4)
+    checkEqual([cells(swapped, 0)[0]?.id, cells(swapped, 0)[4]?.id], [cells(sparse, 0)[4]?.id, cells(sparse, 0)[0]?.id], "찬 칸과는 서로 바꿈")
+    checkEqual(D.moveSlot(sparse, tab: 0, from: 0, to: 0), sparse, "같은 칸은 변화 없음")
+    checkEqual(D.moveSlot(sparse, tab: 0, from: 1, to: 3), sparse, "빈 칸을 끌 수는 없다")
+    checkEqual(D.moveSlot(sparse, tab: 0, from: 0, to: 8), sparse, "범위 밖으로는 옮길 수 없다")
+    checkEqual(D.moveSlot(sparse, tab: 9, from: 0, to: 1), sparse, "없는 탭은 무시")
+    sparse = D.moveSlot(sparse, tab: 0, from: 4, to: 7)
+    checkEqual(sparse.tabs[0].slots.count, 8, "끝 칸으로 옮기면 저장 형태도 8칸")
+
+    let base = fixture()
     let names = slots(base, 1).map(\.name)
-    checkEqual(slots(D.moveSlot(base, tab: 1, at: 0, by: -1), 1).map(\.name), names, "첫 슬롯 위로 이동은 무시")
-    checkEqual(slots(D.moveSlot(base, tab: 1, at: 7, by: 1), 1).map(\.name), names, "마지막 슬롯 아래로 이동은 무시")
-    checkEqual(Array(slots(D.moveSlot(base, tab: 1, at: 0, by: 1), 1).map(\.name).prefix(2)), [names[1], names[0]], "안쪽 이동은 링 위치를 바꾼다")
+    checkEqual(slots(D.moveSlot(base, tab: 1, from: 0, to: 1), 1).map(\.name).prefix(2).map { $0 }, [names[1], names[0]], "가득 찬 탭에서도 끌면 서로 바뀐다")
 
     checkEqual(slots(D.removeSlot(base, tab: 2, at: 0), 2).count, 4, "슬롯 삭제")
+    checkEqual(D.duplicateTarget(base.tabs[2], at: 0), 5, "복제본은 다음 빈 칸으로")
+    checkEqual(D.duplicateTarget(base.tabs[1], at: 0), nil, "빈 칸이 없으면 복제 불가")
     let dup = D.duplicateSlot(base, tab: 2, at: 0)
     checkEqual(slots(dup, 2).count, 6, "슬롯 복제")
-    checkEqual(slots(dup, 2)[1].name, "구글", "복제본은 원본 바로 뒤")
-    check(slots(dup, 2)[1].id != slots(base, 2)[0].id, "복제본은 새 id")
+    checkEqual(cells(dup, 2)[5]?.name, "구글", "복제본은 다음 빈 칸에")
+    check(cells(dup, 2)[5]?.id != cells(base, 2)[0]?.id, "복제본은 새 id")
     checkEqual(Set(slots(dup, 2).map(\.id)).count, 6, "복제 후 id 유일")
+
+    // 복제 칸은 끝에서 처음으로 돌아간다: 0번(12시)만 비어 있을 때 7번 칸의 복제본은 0번으로, 가득 차면 복제 불가
+    var ring = Settings.defaults
+    for position in [7, 1, 2, 3, 4, 5, 6] { ring = D.addSlot(ring, tab: 0, at: position) }
+    checkEqual(D.duplicateTarget(ring.tabs[0], at: 7), 0, "7번 칸 복제본은 처음 빈 칸(0번)으로 돌아간다")
+    checkEqual(cells(D.duplicateSlot(ring, tab: 0, at: 7), 0)[0]?.name, "슬롯 8", "돌아간 칸에 복제본이 들어간다")
+    checkEqual(D.duplicateTarget(D.addSlot(ring, tab: 0, at: 0).tabs[0], at: 7), nil, "가득 찬 링은 복제 불가")
 
     // 새 슬롯 → 앱 선택 시 기본 이름이 앱 이름으로 바뀐다
     var added = D.removeSlot(base, tab: 1, at: 7)
     added = D.addSlot(added, tab: 1)
-    let newName = slots(added, 1).last?.name ?? ""
+    let newName = cells(added, 1)[7]?.name ?? ""
     check(newName.hasPrefix("슬롯 "), "자동 부여된 기본 이름")
     checkEqual(D.applyingAction(.launchApp(bundleId: "com.apple.calculator", appPath: nil), to: Slot(id: "n", name: newName, label: nil, action: D.defaultAction(.launchApp)), apps: [calculator()]).name, "Calculator", "새 슬롯에 앱을 고르면 파일 이름으로 채움")
 
@@ -259,6 +297,12 @@ private func dirtyDetection() {
     let a = D.updateSlot(s, tab: 2, at: 0) { $0.action = action }
     let b = D.updateSlot(s, tab: 2, at: 0) { $0.action = .macroSequence(stopOnError: true, steps: [.openURL("https://a.example")]) }
     check(!D.isDirty(baseline: a, draft: b), "stopOnError 생략 표기와 명시 표기는 같다")
+
+    // 끝에 붙은 빈 칸(null)은 저장 형태에서 떨어지므로 변경이 아니다. 슬롯을 비우는 것은 변경이다.
+    var padded = s
+    padded.tabs[2].slots += [nil, nil, nil]
+    check(!D.isDirty(baseline: s, draft: padded), "끝에 붙은 빈 칸은 변경이 아니다")
+    check(D.isDirty(baseline: s, draft: D.removeSlot(s, tab: 2, at: 0)), "슬롯을 비우면 변경")
 
 }
 

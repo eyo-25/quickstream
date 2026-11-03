@@ -44,7 +44,7 @@ private struct SelectableCardModifier: ViewModifier {
 /// 현재 테마에 맞는 미리보기(파이/오비트). 두 뷰는 init 시그니처와 클릭→슬롯 환산이 같다.
 struct ThemedPreview: View {
     let theme: OverlayTheme
-    let slots: [Slot]
+    let slots: [Slot?]
     let icons: [NSImage?]
     let selected: Int
     var invalid: Set<Int> = []

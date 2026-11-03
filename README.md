@@ -16,7 +16,7 @@
   <img alt="MIT License" src="https://img.shields.io/badge/license-MIT-green">
 </p>
 
-> **English summary** — QuickStream is a native macOS (14+) menu-bar app. Press **⌥Q** and an 8-slot radial launcher opens in the middle of your screen; pick a slot with the arrow keys, number keys or mouse to switch/launch an app, open a URL, copy text or run a macro. There are two themes: orbit (default) and pie. Install with `brew install --cask eyo-25/tap/quickstream`. The UI language is Korean.
+> **English summary** — QuickStream is a native macOS (14+) menu-bar app. Press **⌥Q** and an 8-slot radial launcher opens in the middle of your screen; pick a slot with the arrow keys, number keys or mouse to switch/launch an app, open a URL, copy text or run a macro. There are two themes: orbit (default) and pie. When you type a URL for a slot in Settings, the app fetches that page's title and favicon once typing pauses (the only network use besides update checks). Install with `brew install --cask eyo-25/tap/quickstream`. The UI language is Korean.
 
 ---
 
@@ -418,7 +418,7 @@ Finder · Spotlight 에서 이미 실행 중인 앱을 다시 열어도 설정 �
 
 설정은 `~/Library/Application Support/QuickStream/settings.json` 에 저장됩니다(첫 실행 시 기본값이 만들어집니다). 직접 편집해도 되고, 편집한 뒤 메뉴의 **설정 다시 불러오기** 를 누르면 반영됩니다. 검증에 실패한 파일은 덮어쓰지 않고 기본값으로 동작하며 사유를 보여 줍니다. 그 상태에서 설정 창에서 저장하면 깨진 파일이 `.bak` 으로 보존됩니다. 이전 Electron 판의 설정 파일과 형식이 같습니다.
 
-최상위 키는 `shortcut`, `launchAtLogin`, `overlay`, `tabs` 입니다. `overlay` 아래 값은 다음과 같습니다. 형식이 틀린 색이나 알 수 없는 열거형 값은 파일 전체를 버리지 않고 기본값으로 읽습니다. 반면 **숫자가 허용 범위를 벗어나면**(`alpha` 0.4~0.95, `radius` 24~56, 링 `ring` 160~320, 중앙 `center` 40~(ring−72), 테두리 `border` 1~12) 검증 실패로 처리되어 **파일 전체가 기본값으로 대체**됩니다(파일은 덮어쓰지 않고 사유가 표시됩니다).
+최상위 키는 `shortcut`, `launchAtLogin`, `closeKey`, `overlay`, `tabs` 입니다. `overlay` 아래 값은 다음과 같습니다. 형식이 틀린 색이나 알 수 없는 열거형 값은 파일 전체를 버리지 않고 기본값으로 읽습니다. 반면 **숫자가 허용 범위를 벗어나면**(`alpha` 0.4~0.95, `radius` 24~56, 링 `ring` 160~320, 중앙 `center` 40~(ring−72), 테두리 `border` 1~12) 검증 실패로 처리되어 **파일 전체가 기본값으로 대체**됩니다(파일은 덮어쓰지 않고 사유가 표시됩니다).
 
 | 키 | 값 | 기본 |
 | --- | --- | --- |
@@ -473,6 +473,7 @@ zap 은 `~/Library/Application Support/QuickStream`(설정·로그)와 이전 El
 | 로그인 시 자동 시작이 안 됨 | 설정에서 다시 켜고 **시스템 설정 › 일반 › 로그인 항목** 에서 퀵스트림이 허용되어 있는지 확인하세요 |
 | 글라스 본체에서 글자가 잘 안 보임 | 기본 투명도(0.4)는 허용 범위의 가장 투명한 쪽이라, 아주 밝은 바탕화면 위에서는 글라스의 흰 글자 대비가 떨어집니다(어두운 바탕에서는 읽힙니다). 설정 › 패널 모양 › 모양에서 투명도를 0.74 이상으로 올리거나 다크 그레이(불투명 바닥판)를 쓰세요 |
 | 링 바깥을 눌렀더니 앱이 실행됨 | 의도된 동작입니다. 링 바깥 클릭은 선택된 칸을 실행합니다. 닫으려면 `Esc`, `Q`, 가운데 원을 쓰세요 |
+| URL 슬롯의 이름·아이콘이 안 바뀜 | 이름·아이콘은 설정 창에서 URL 을 **입력할 때만** 가져옵니다(입력이 멈출 때마다, 마지막 입력 약 1초 뒤, 호스트에 점이 있는 주소만. 앱을 시작하거나 설정을 저장·다시 불러올 때는 받은 파일을 읽을 뿐 다시 요청하지 않습니다). 사이트가 봇을 막거나 응답이 늦거나(8초) 아이콘이 SVG 뿐이면 이름은 호스트 이름, 아이콘은 초기 글자로 남습니다. URL 을 한 글자 고쳐 다시 입력하면 다시 가져옵니다. 받아 둔 아이콘은 `~/Library/Application Support/QuickStream/favicons/` 에 있고 지워도 됩니다 |
 | **업데이트** 가 끝나지 않음 | `~/Library/Application Support/QuickStream/update.log` 를 읽고, 터미널에서 `brew upgrade --cask eyo-25/tap/quickstream` 을 직접 실행하세요 |
 | **업데이트가 실패함** | `~/Library/Application Support/QuickStream/update.log` 를 확인하세요. tap 이 아직 새 버전을 받지 못했다면 잠시 뒤 다시 시도하거나 터미널에서 `brew update && brew upgrade --cask eyo-25/tap/quickstream` 를 실행하세요. macOS 가 다른 앱 번들 수정에 '앱 관리' 권한을 요구하는 환경에서는 **시스템 설정 › 개인정보 보호 및 보안 › 앱 관리** 에서 퀵스트림을 허용해야 할 수도 있습니다(환경에 따라 다릅니다) |
 

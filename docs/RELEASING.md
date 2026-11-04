@@ -1,6 +1,6 @@
 # 퀵스트림 릴리스
 
-릴리스는 노트북이 아니라 GitHub Actions 가 빌드합니다. `release.sh` 가 메인테이너의 Mac 에서 전체를 이끕니다: 버전 태그를 달고, Release 워크플로가 zip 을 빌드·증명할 때까지 기다리고, 결과를 검증해 공개한 뒤, Homebrew cask 를 새 버전으로 바꿉니다.
+릴리스는 노트북이 아니라 GitHub Actions 가 빌드합니다. `release.sh` 가 메인테이너의 Mac 에서 전체를 이끕니다: 버전 태그를 달고, Release 워크플로가 zip 을 빌드·증명할 때까지 기다리고, 결과를 검증한 뒤 **로컬 키체인의 Sparkle 키로 업데이트 피드(`appcast.xml`)를 서명**해 올리고, 공개한 뒤, Homebrew cask 를 새 버전으로 바꿉니다.
 
 ## 시작 전에
 
@@ -20,18 +20,26 @@
 
 | # | 단계 | 하는 일 | 다시 실행하면 |
 |---|---|---|---|
-| 1 | 사전 점검 | 브랜치, 깨끗한 작업 트리, `origin/main`, `gh auth status`, 두 저장소의 push 권한, CHANGELOG 섹션, X.Y.Z 가 `Info.plist` 의 버전보다 큰지(`sort -V`. 단 `v*` 태그가 하나도 없는 첫 릴리스는 X.Y.Z 와 같아도 통과), 배포할 커밋의 CI 통과(진행 중이면 기다림) | 반복 |
+| 1 | 사전 점검 | 브랜치, 깨끗한 작업 트리, `origin/main`, `gh auth status`, 두 저장소의 push 권한, CHANGELOG 섹션, **로그인 키체인의 Sparkle 개인키가 `Info.plist` 의 `SUPublicEDKey` 와 짝인지**, X.Y.Z 가 `Info.plist` 의 버전보다 큰지(`sort -V`. 단 `v*` 태그가 하나도 없는 첫 릴리스는 X.Y.Z 와 같아도 통과), 배포할 커밋의 CI 통과(진행 중이면 기다림) | 반복 |
 | 2 | 테스트 | `tests/swift/run.sh` | 태그가 이미 있거나 버전 커밋에서 이어갈 때는 건너뜀 |
 | 3 | 버전 올리기·태그 | `plutil -replace` 로 `Info.plist` 의 `CFBundleShortVersionString`·`CFBundleVersion` 변경, 커밋 `Release X.Y.Z`, 주석 태그 `vX.Y.Z`. 첫 릴리스는 `Info.plist` 가 이미 X.Y.Z 이므로 커밋 없이 HEAD 에 태그만 답니다 | `vX.Y.Z` 가 HEAD 에 있으면 건너뜀. 다른 곳을 가리키면 멈춤 |
 | 4 | 푸시 | `git push --atomic origin main vX.Y.Z` | 이미 푸시됐으면 변화 없음 |
 | 5 | 빌드 | 태그가 `.github/workflows/release.yml` 을 `macos-15` 러너에서 시작: 테스트, `./build.sh`, `.github/verify-app.sh`(버전, arm64 + x86_64, 최소 macOS 14.0, hardened runtime 서명), `ditto` zip, 빌드 출처 증명, CHANGELOG 섹션·Swift 버전·러너 이미지가 담긴 **draft** 릴리스. `release.sh` 는 `gh run watch` 로 따라감 | draft 에 zip 이 있으면 건너뜀 |
 | 6 | 검증 | draft 의 zip 을 내려받아 `gh attestation verify`(`refs/tags/vX.Y.Z` 의 `release.yml` 에서 나왔는지), 압축 해제 후 `verify-app.sh`, sha256 계산 | 반복 |
-| 7 | 공개 | `gh release edit vX.Y.Z --draft=false --latest=false`: zip 은 받을 수 있지만 앱의 업데이트 확인이 읽는 `releases/latest` 는 아직 이전 버전 | 이미 공개됐으면 건너뜀 |
+| 6b | 업데이트 피드 | 검증한 그 zip 과 CHANGELOG 섹션(릴리스 노트)으로 `tools/make-appcast.sh` 가 `appcast.xml` 을 만들고 Sparkle `sign_update` 로 EdDSA 서명을 붙임(처음에는 키체인이 접근 허용을 물으면 '항상 허용'). 항목 수·버전·다운로드 주소·길이·서명을 다시 확인하고 `sign_update --verify` 로 서명을 검증한 뒤 draft 릴리스에 에셋으로 올림(`--clobber`). 앱이 읽는 피드 주소는 `https://github.com/eyo-25/quickstream/releases/latest/download/appcast.xml` 이라 10단계에서 latest 가 되어야 사용자에게 보입니다 | 반복 |
+| 7 | 공개 | `gh release edit vX.Y.Z --draft=false --latest=false`: zip 은 받을 수 있지만 앱의 업데이트 피드가 읽는 `releases/latest` 는 아직 이전 버전 | 이미 공개됐으면 건너뜀 |
 | 8 | 공개 다운로드 | 공개 URL 을 `curl` 로 받아 sha256 비교 | 반복 |
 | 9 | cask | tap 의 `Casks/quickstream.rb` 의 `version`·`sha256` 변경, 두 줄이 정확히 바뀌었는지 확인, Homebrew 가 있으면 `brew style`, 커밋 `quickstream X.Y.Z` 후 푸시 | cask 가 이미 같으면 건너뜀 |
-| 10 | latest | `gh release edit vX.Y.Z --latest`: 이 순간부터 앱의 업데이트 확인이 X.Y.Z 를 안내 | 반복 |
+| 10 | latest | `gh release edit vX.Y.Z --latest`: 이 순간부터 앱이 읽는 `appcast.xml` 이 X.Y.Z 를 안내 | 반복 |
 
 순서가 중요합니다. 앱은 Homebrew 가 설치할 수 있게 된 뒤(9단계)에야 업데이트를 안내하고(10단계), cask 는 zip 이 공개되어 검증된 뒤(6~8단계)에야 바뀝니다.
+
+## 업데이트 서명 키
+
+- 개인키는 `tools/sparkle.sh` 가 받은 Sparkle `generate_keys` 로 만들어 **로그인 키체인**에 있습니다. 공개키는 `Info.plist` 의 `SUPublicEDKey` 에 들어 있고 앱에 박힙니다. CI 에는 개인키가 없습니다.
+- **백업하세요.** 잃어버리면 이미 설치된 앱은 새 업데이트를 검증하지 못해 사용자가 직접 재설치해야 합니다. 내보내기: `$(tools/sparkle.sh)/bin/generate_keys -x <파일>` 로 파일을 만들어 비밀번호 관리자 같은 안전한 곳에 두고 평문 파일은 지웁니다. 새 Mac 에서는 `generate_keys -f <파일>` 로 가져옵니다.
+- 키를 바꾸려면 새 공개키를 넣은 앱을 사용자가 직접 설치해야 하므로(옛 키로 서명한 업데이트로 새 키를 줄 수는 있지만 이 저장소는 그 절차를 두지 않았습니다) 가급적 바꾸지 않습니다.
+- Sparkle 을 올릴 때는 `tools/sparkle.sh` 의 `version` 과 `sha256` 을 함께 바꾸고, 새로 받은 파일의 sha256 을 직접 계산해서 넣습니다.
 
 ## 첫 릴리스 (0.1.0)
 
@@ -67,7 +75,7 @@
 
    Homebrew 는 설치된 버전과 cask 버전이 다르면 outdated 로 보므로, `brew upgrade --cask quickstream` 이 X.Y.Z 사용자를 이전 버전으로 돌려보내고 새 설치는 이전 버전을 받습니다.
 
-2. 앱의 업데이트 확인이 X.Y.Z 를 더 안내하지 않게 합니다: `gh release edit vPREV -R eyo-25/quickstream --latest`.
+2. 앱의 업데이트 피드가 X.Y.Z 를 더 안내하지 않게 합니다: `gh release edit vPREV -R eyo-25/quickstream --latest`(`appcast.xml` 은 latest 릴리스의 에셋이므로 이전 버전 항목이 다시 보입니다. 이미 X.Y.Z 로 올라간 사용자는 더 높은 버전만 받으므로 이전 버전으로는 내려가지 않습니다).
 3. X.Y.Z 릴리스 노트 맨 위에 수정 버전을 가리키는 경고를 덧붙입니다.
 4. `main` 에서 고치고 다음 패치 버전을 평소처럼 배포합니다. `release.sh` 가 cask 와 latest 를 다시 앞으로 옮깁니다.
 

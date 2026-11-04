@@ -34,5 +34,13 @@
 	<string>eyo-25/tap/quickstream</string>
 	<key>QSGitHubRepo</key>
 	<string>eyo-25/quickstream</string>
+	<key>SUEnableAutomaticChecks</key>
+	<true/>
+	<key>SUFeedURL</key>
+	<string>https://github.com/eyo-25/quickstream/releases/latest/download/appcast.xml</string>
+	<key>SUPublicEDKey</key>
+	<string>z526mw1SGDsmjDp00QXHnrL/YutysmacGoYSvP1xVCY=</string>
+	<key>SUScheduledCheckInterval</key>
+	<integer>86400</integer>
 </dict>
 </plist>

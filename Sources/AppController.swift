@@ -10,11 +10,10 @@ final class AppController: NSObject, NSMenuDelegate {
     private let overlay = OverlayController()
     private let shortcut = GlobalShortcut()
     private let loginItem = SystemLoginItem()
-    let updater = UpdateController()
+    let updater = SparkleUpdater()
 
     private var statusItem: NSStatusItem?
     private var settingsWindow: SettingsWindowController?
-    private var updateTimer: Timer?
 
     /// 오버레이를 열기 직전에 앞에 있던 앱(Esc 로 닫으면 포커스를 돌려준다)
     private var previousApp: RunningApp?
@@ -54,21 +53,19 @@ final class AppController: NSObject, NSMenuDelegate {
 
         applyStoredSettings()
 
-        // 메뉴와 열려 있는 정보 화면이 함께 갱신된다(정보 화면은 body 에서 상태 문구를 읽으므로 변경을 알려 줘야 다시 그린다).
-        updater.onStatusChange = { [weak self] _ in
-            self?.refreshStatusMenu()
-            self?.settingsWindow?.model.objectWillChange.send()
-        }
-        // 업데이트 재시작은 도우미를 띄우기 전에 저장하지 않은 설정을 확인한다. 승인되면 이어지는 종료에서 같은 확인을 다시 하지 않는다.
+        // 자동 확인이 새 버전을 창 없이 알리면 메뉴에 항목을 보인다
+        updater.onChange = { [weak self] in self?.refreshStatusMenu() }
+        // 업데이트 재시작은 설치 도우미가 앱을 다시 열기 전에 저장하지 않은 설정을 확인한다. 승인되면 이어지는 종료에서 같은 확인을 다시 하지 않는다.
+        // 종료가 끝내 일어나지 않을 때를 대비해 승인은 1분 뒤에 거둔다(그 뒤의 ⌘Q 는 다시 묻는다).
         updater.confirmQuit = { [weak self] in
             guard let self else { return true }
             quitApproved = shouldTerminate()
+            if quitApproved {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 60) { [weak self] in self?.quitApproved = false }
+            }
             return quitApproved
         }
-        updater.checkInBackground()
-        // 1시간마다 깨운다. 실제 요청 간격은 UpdateController 의 스로틀(6시간)이 제한한다. 타이머를 스로틀과 같은 주기로 두면
-        // 첫 발화가 항상 스로틀에 걸려 사실상 12시간마다 확인되기 때문이다.
-        updateTimer = Timer.scheduledTimer(withTimeInterval: 60 * 60, repeats: true) { [weak self] _ in self?.updater.checkInBackground() }
+        updater.start()
     }
 
     /// 시험 전용 키 주입(`--keep-open` 실행에서만). 일반 실행에서는 다른 프로세스가 키를 넣을 수 없다.
@@ -194,15 +191,17 @@ final class AppController: NSObject, NSMenuDelegate {
                 store: store,
                 catalog: catalog,
                 save: { [weak self] in self?.applySettings($0) ?? .failure("앱이 종료 중입니다") },
-                checkForUpdates: { [weak self] in self?.updater.checkNow() },
-                versionText: { [weak self] in self?.updater.statusText ?? AppInfo.version },
+                checkForUpdates: { [weak self] in self?.updater.checkForUpdates() },
+                versionText: { AppInfo.version },
+                updateChecksAutomatically: { [weak self] in self?.updater.automaticChecks ?? false },
+                setUpdateChecksAutomatically: { [weak self] in self?.updater.automaticChecks = $0 },
                 onRecordingChange: { [weak self] in self?.setShortcutRecording($0) }
             )
         }
         settingsWindow?.open()
     }
 
-    /// 종료해도 되는가: 설정 창에 저장하지 않은 변경이 있으면 확인한다. 이미 승인된 종료(업데이트 재시작)는 다시 묻지 않는다.
+    /// 종료해도 되는가: 설정 창에 저장하지 않은 변경이 있으면 확인한다(⌘Q·메뉴 종료). 이미 승인된 종료(업데이트 재시작)는 다시 묻지 않는다.
     func shouldTerminate() -> Bool { quitApproved || (settingsWindow?.confirmTermination() ?? true) }
 
     /// 검증 → 단축키 교체 시험 → 로그인 항목 → 파일 저장 → 적용. 어느 단계든 실패하면 앞 단계를 되돌려 파일·단축키·로그인 항목이 이전 상태 그대로다.
@@ -305,17 +304,7 @@ final class AppController: NSObject, NSMenuDelegate {
 
         menu.addItem(.separator())
         menu.addItem(item("설정…", #selector(openSettings), key: ","))
-        if case let .available(version, _) = updater.status {
-            menu.addItem(item("새 버전 \(version) 업데이트…", #selector(startUpdate)))
-            // 직전 업데이트가 실패했어도 항목은 남겨 재시도할 수 있게 하고, 사유는 보조 줄로 보여 준다
-            if let failure = updater.lastFailure {
-                let note = NSMenuItem(title: "마지막 업데이트 실패: \(failure)", action: nil, keyEquivalent: "")
-                note.isEnabled = false
-                menu.addItem(note)
-            }
-        } else {
-            menu.addItem(item("업데이트 확인…", #selector(checkForUpdates)))
-        }
+        menu.addItem(item(updater.pendingVersion.map { "새 버전 \($0) 업데이트…" } ?? "업데이트 확인…", #selector(checkForUpdates)))
         menu.addItem(item("JSON 파일 열기", #selector(openSettingsFile)))
         menu.addItem(item("설정 다시 불러오기", #selector(reloadSettings)))
         menu.addItem(.separator())
@@ -329,8 +318,7 @@ final class AppController: NSObject, NSMenuDelegate {
     }
 
     @objc private func openOverlayFromMenu() { showOverlay() }
-    @objc private func checkForUpdates() { updater.checkNow() }
-    @objc private func startUpdate() { updater.startUpdate() }
+    @objc private func checkForUpdates() { updater.checkForUpdates() }
     @objc private func openSettingsFile() { NSWorkspace.shared.open(store.fileURL) }
     @objc private func reloadSettings() { applyStoredSettings() }
 

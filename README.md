@@ -122,7 +122,7 @@ open -a QuickStream
 | 하고 싶은 일 | 명령 |
 | --- | --- |
 | 설치된 버전과 cask 정보 보기 | `brew info --cask eyo-25/tap/quickstream` |
-| 업데이트 | `brew upgrade --cask quickstream` (앱 메뉴의 **업데이트…** 로도 가능) |
+| 업데이트 | 앱 메뉴의 **업데이트 확인…** (앱이 직접 업데이트합니다), 또는 `brew upgrade --cask quickstream` |
 | 삭제 (설정은 남김) | `brew uninstall --cask quickstream` |
 | 설정·로그·캐시까지 완전 삭제 | `brew uninstall --zap --cask quickstream` |
 | 다시 설치 | `brew reinstall --cask quickstream` |
@@ -155,7 +155,7 @@ cd quickstream
 ./install.sh
 ```
 
-앱을 빌드해 `~/Applications/QuickStream.app` 에 설치하고 엽니다. 업데이트하려면 `git pull` 후 `./install.sh` 를 다시 실행하세요. `--dry-run` 을 붙이면 바꾸지 않고 할 일만 보여 주고, 삭제는 `./install.sh --uninstall` 입니다(설정 폴더는 남깁니다). Homebrew 로 이미 설치돼 있으면 같은 앱이 두 벌이 되지 않도록 `install.sh` 가 멈춥니다(먼저 `brew uninstall --cask quickstream`).
+앱을 빌드해 `~/Applications/QuickStream.app` 에 설치하고 엽니다. 업데이트는 앱 메뉴의 **업데이트 확인…** 으로 되고(릴리스 빌드로 바뀝니다), 소스를 직접 받아 쓰려면 `git pull` 후 `./install.sh` 를 다시 실행하세요. `--dry-run` 을 붙이면 바꾸지 않고 할 일만 보여 주고, 삭제는 `./install.sh --uninstall` 입니다(설정 폴더는 남깁니다). Homebrew 로 이미 설치돼 있으면 같은 앱이 두 벌이 되지 않도록 `install.sh` 가 멈춥니다(먼저 `brew uninstall --cask quickstream`).
 
 ### 서명과 다운로드 검증
 
@@ -329,7 +329,7 @@ cd quickstream
   <img src="docs/images/settings-about.png" alt="정보 화면" width="640">
 </p>
 
-버전을 확인하고 **업데이트 확인** 을 누를 수 있습니다.
+버전을 확인하고, **업데이트 확인** 을 누르거나 **새 버전 자동 확인** 을 켜고 끌 수 있습니다.
 
 ### 저장할 때 일어나는 일
 
@@ -398,7 +398,7 @@ cd quickstream
 | --- | --- |
 | **퀵스트림 열기 (⌥Q)** | 오버레이 열기 |
 | **설정…** (⌘,) | 설정 창 열기 |
-| **업데이트 확인… / 새 버전 업데이트…** | 새 버전 확인 · 설치 |
+| **업데이트 확인… / 새 버전 X 업데이트…** | 새 버전 확인 · 설치(자동 확인이 찾은 새 버전은 이 항목으로 알려 줍니다) |
 | **JSON 파일 열기** | `settings.json` 을 기본 편집기로 열기 |
 | **설정 다시 불러오기** | 파일을 직접 고친 뒤 앱에 반영 |
 | **퀵스트림 종료** (⌘Q) | 종료. 설정 창에 저장하지 않은 변경이 있으면 먼저 묻습니다 |
@@ -443,10 +443,11 @@ Finder · Spotlight 에서 이미 실행 중인 앱을 다시 열어도 설정 �
 
 ## 업데이트와 삭제
 
-앱은 시작할 때와 6시간마다 GitHub 에서 새 릴리스를 확인하고(요청은 최대 6시간에 한 번), 새 버전이 있으면 버전마다 한 번 알려 줍니다. 메뉴의 **업데이트 확인…** 으로 바로 확인할 수도 있습니다.
+앱은 하루에 한 번 GitHub 릴리스의 `appcast.xml` 을 받아 새 버전이 있는지 확인합니다(설정 › 정보의 **새 버전 자동 확인** 으로 끌 수 있습니다). 새 버전을 찾으면 창을 갑자기 띄우지 않고 메뉴의 **새 버전 X 업데이트…** 항목으로 알려 주며, 그 항목이나 **업데이트 확인…** 을 누르면 변경 내역과 함께 업데이트 창이 열립니다. 설치를 고르면 새 버전 zip 을 받아 **앱에 들어 있는 공개키로 서명을 확인한 뒤에만** 앱을 바꾸고 다시 엽니다. 서명이 맞지 않으면 설치하지 않습니다. 저장하지 않은 설정이 있으면 종료 전에 먼저 묻습니다.
 
-- **Homebrew 로 설치한 경우**: 메뉴의 **업데이트** 가 백그라운드에서 `brew update` 와 `brew upgrade --cask eyo-25/tap/quickstream` 을 실행하고 끝나면 앱을 다시 엽니다. 한 번에 하나만 실행되고, 출력은 `~/Library/Application Support/QuickStream/update.log` 에 남으며, 11분이 지나도 끝나지 않으면 알려 주고 다시 시도하게 합니다. 저장하지 않은 설정이 있으면 재시작 전에 먼저 묻습니다.
-- **zip · 소스로 설치한 경우**: 릴리스 페이지를 엽니다(소스 설치본은 `git pull` 후 `./install.sh`).
+- **0.1.3 이상**부터 이 방식입니다. 0.1.2 이하에는 업데이트 기능이 달라서 0.1.3 으로는 한 번 직접 설치해야 합니다(Homebrew 설치본은 예전 방식 그대로 `brew upgrade` 가 0.1.3 으로 올립니다).
+- Homebrew 로 설치한 경우에도 앱이 직접 업데이트할 수 있고, 터미널에서 `brew upgrade --cask quickstream` 을 써도 됩니다.
+- 앱이 있는 폴더에 쓸 권한이 없으면(예: 관리자 소유의 `/Applications`) macOS 가 암호를 물을 수 있습니다.
 
 직접 하려면:
 
@@ -466,7 +467,7 @@ zap 은 `~/Library/Application Support/QuickStream`(설정·로그)와 이전 El
 | --- | --- |
 | "열 수 없습니다" 라고 나옴 | **시스템 설정 › 개인정보 보호 및 보안** 에서 **그래도 열기**, 또는 `xattr -dr com.apple.quarantine /Applications/QuickStream.app`. zip 을 직접 받았거나 cask 의 격리 제거 단계가 실패했을 때 생깁니다 |
 | `brew install` 이 `No Cask with this name` 이라고 함 | `brew update` 후 다시 시도하세요. 전체 이름 `eyo-25/tap/quickstream` 으로 설치해야 합니다 |
-| `Refusing to load cask … from untrusted tap` 이라고 함 | Homebrew 7 이상은 신뢰하지 않은 tap 의 cask 를 불러오지 않습니다. `brew trust --cask eyo-25/tap/quickstream` 을 실행한 뒤 다시 시도하세요. 앱 안의 **업데이트** 도 같은 이유로 실패할 수 있으며(`update.log` 에 같은 메시지), 신뢰하면 해결됩니다 |
+| `Refusing to load cask … from untrusted tap` 이라고 함 | Homebrew 7 이상은 신뢰하지 않은 tap 의 cask 를 불러오지 않습니다. `brew trust --cask eyo-25/tap/quickstream` 을 실행한 뒤 다시 시도하세요 |
 | 메뉴바에 아이콘이 안 보임 | 노치가 있는 Mac 은 다른 메뉴바 항목이 가릴 수 있습니다. 일부를 종료하거나, macOS 26 이상은 **시스템 설정 › 메뉴 막대** 를 확인하세요 |
 | ⌥Q 가 반응하지 않거나 다른 앱도 반응함 | 다른 앱과 단축키가 겹친 것입니다. 설정 › 일반에서 조합을 바꾸세요 |
 | 설정이 기본값으로 돌아감 | 메뉴에 표시된 사유를 확인하세요. `settings.json` 이 깨졌다면 파일은 그대로 두고 기본값으로 동작합니다. 설정 창에서 저장하면 깨진 파일이 `.bak` 으로 남습니다 |
@@ -474,8 +475,7 @@ zap 은 `~/Library/Application Support/QuickStream`(설정·로그)와 이전 El
 | 글라스 본체에서 글자가 잘 안 보임 | 기본 투명도(0.4)는 허용 범위의 가장 투명한 쪽이라, 아주 밝은 바탕화면 위에서는 글라스의 흰 글자 대비가 떨어집니다(어두운 바탕에서는 읽힙니다). 설정 › 패널 모양 › 모양에서 투명도를 0.74 이상으로 올리거나 다크 그레이(불투명 바닥판)를 쓰세요 |
 | 링 바깥을 눌렀더니 앱이 실행됨 | 의도된 동작입니다. 링 바깥 클릭은 선택된 칸을 실행합니다. 닫으려면 `Esc`, `Q`, 가운데 원을 쓰세요 |
 | URL 슬롯의 이름·아이콘이 안 바뀜 | 이름·아이콘은 설정 창에서 URL 을 **입력할 때만** 가져옵니다(입력이 멈출 때마다, 마지막 입력 약 1초 뒤, 호스트에 점이 있는 주소만. 앱을 시작하거나 설정을 저장·다시 불러올 때는 받은 파일을 읽을 뿐 다시 요청하지 않습니다). 사이트가 봇을 막거나 응답이 늦거나(8초) 아이콘이 SVG 뿐이면 이름은 호스트 이름, 아이콘은 초기 글자로 남습니다. URL 을 한 글자 고쳐 다시 입력하면 다시 가져옵니다. 받아 둔 아이콘은 `~/Library/Application Support/QuickStream/favicons/` 에 있고 지워도 됩니다 |
-| **업데이트** 가 끝나지 않음 | `~/Library/Application Support/QuickStream/update.log` 를 읽고, 터미널에서 `brew upgrade --cask eyo-25/tap/quickstream` 을 직접 실행하세요 |
-| **업데이트가 실패함** | `~/Library/Application Support/QuickStream/update.log` 를 확인하세요. tap 이 아직 새 버전을 받지 못했다면 잠시 뒤 다시 시도하거나 터미널에서 `brew update && brew upgrade --cask eyo-25/tap/quickstream` 를 실행하세요. macOS 가 다른 앱 번들 수정에 '앱 관리' 권한을 요구하는 환경에서는 **시스템 설정 › 개인정보 보호 및 보안 › 앱 관리** 에서 퀵스트림을 허용해야 할 수도 있습니다(환경에 따라 다릅니다) |
+| **업데이트가 안 됨** | 인터넷 연결과 앱이 있는 폴더의 쓰기 권한을 확인하세요(관리자 소유 폴더면 암호를 묻습니다). 설정 › 정보에서 **업데이트 확인** 을 눌러 오류 메시지를 읽고, 그래도 안 되면 [릴리스 페이지](https://github.com/eyo-25/quickstream/releases)에서 직접 받아 설치하세요. 0.1.2 이하는 0.1.3 으로 한 번 직접 설치해야 합니다 |
 
 그 밖의 문제는 [Issues](https://github.com/eyo-25/quickstream/issues) 에 신고해 주세요. 버그 신고 양식에 필요한 정보가 나와 있습니다. 보안 취약점은 공개 이슈가 아니라 [SECURITY.md](SECURITY.md) 의 비공개 경로로 알려 주세요.
 
@@ -484,8 +484,8 @@ zap 은 `~/Library/Application Support/QuickStream`(설정·로그)와 이전 El
 ## 개인정보와 권한
 
 - **추가 권한이 필요 없습니다.** 손쉬운 사용, 화면 기록, 전체 디스크 접근 등을 요구하지 않습니다.
-- **네트워크는 두 곳에만** 씁니다. ① 업데이트 확인(GitHub 릴리스 조회). ② 설정에서 슬롯에 URL 을 입력했을 때, 입력이 멈추면 그 주소의 페이지(HTML 앞부분)와 파비콘을 받아 이름·아이콘에 쓰는 조회(쿠키 없이, 입력할 때만 — 오버레이를 열 때나 슬롯을 실행할 때는 하지 않습니다). 사용 기록·텔레메트리를 보내지 않습니다. 암호화 없는 `http://` 주소는 macOS 보안 정책(ATS)에 막혀 조회되지 않을 수 있고, 그러면 이름은 호스트 이름이 되고 아이콘은 초기 글자로 남습니다.
-- 설정과 로그, 받아 둔 파비콘(`favicons/<호스트>.png`)은 내 Mac 의 `~/Library/Application Support/QuickStream` 에 저장되고, 업데이트 확인 기록(마지막 확인 시각·알려 준 버전)만 환경설정(`~/Library/Preferences/io.github.eyo-25.quickstream.plist`)에 남습니다.
+- **네트워크는 두 곳에만** 씁니다. ① 업데이트: 하루에 한 번(설정 › 정보에서 끌 수 있음) GitHub 의 `appcast.xml` 을 받아 새 버전이 있는지 보고, 업데이트를 고르면 새 버전 zip 을 받습니다. 요청에 담기는 것은 앱 이름·버전(User-Agent)과 IP·시간뿐이고 시스템 정보 같은 추가 정보는 보내지 않으며, 받은 zip 은 앱에 들어 있는 공개키로 서명을 확인한 뒤에만 설치합니다. ② 설정에서 슬롯에 URL 을 입력했을 때, 입력이 멈추면 그 주소의 페이지(HTML 앞부분)와 파비콘을 받아 이름·아이콘에 쓰는 조회(쿠키 없이, 입력할 때만 — 오버레이를 열 때나 슬롯을 실행할 때는 하지 않습니다). 사용 기록·텔레메트리를 보내지 않습니다. 암호화 없는 `http://` 주소는 macOS 보안 정책(ATS)에 막혀 조회되지 않을 수 있고, 그러면 이름은 호스트 이름이 되고 아이콘은 초기 글자로 남습니다.
+- 설정과 로그, 받아 둔 파비콘(`favicons/<호스트>.png`)은 내 Mac 의 `~/Library/Application Support/QuickStream` 에 저장되고, 업데이트 확인 기록(마지막 확인 시각 등 Sparkle 설정)만 환경설정(`~/Library/Preferences/io.github.eyo-25.quickstream.plist`)에 남습니다.
 - URL 열기는 `http` / `https` 만, 슬롯 동작에 셸·임의 스크립트 실행은 없습니다.
 
 ---

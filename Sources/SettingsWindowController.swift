@@ -10,8 +10,12 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
          save: @escaping (Settings) -> ActionResult,
          checkForUpdates: @escaping () -> Void,
          versionText: @escaping () -> String,
+         updateChecksAutomatically: @escaping () -> Bool = { false },
+         setUpdateChecksAutomatically: @escaping (Bool) -> Void = { _ in },
          onRecordingChange: @escaping (Bool) -> Void) {
-        model = SettingsModel(store: store, catalog: catalog, save: save, checkForUpdates: checkForUpdates, versionText: versionText, onRecordingChange: onRecordingChange)
+        model = SettingsModel(store: store, catalog: catalog, save: save, checkForUpdates: checkForUpdates, versionText: versionText,
+                              updateChecksAutomatically: updateChecksAutomatically, setUpdateChecksAutomatically: setUpdateChecksAutomatically,
+                              onRecordingChange: onRecordingChange)
         let host = NSHostingController(rootView: SettingsRootView(model: model))
         let window = NSWindow(contentViewController: host)
         window.title = "퀵스트림 설정"

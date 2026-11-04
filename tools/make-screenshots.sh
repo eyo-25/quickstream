@@ -17,7 +17,9 @@ for file in "$root"/Sources/*.swift; do
   [[ $(basename "$file") == main.swift ]] || sources+=("$file")
 done
 
+sparkle=$("$root/tools/sparkle.sh")  # AppController 가 Sparkle 을 쓰므로 같은 프레임워크에 링크한다
 /usr/bin/swiftc -swift-version 5 -module-name QSShots -target "$(uname -m)-apple-macos14.0" \
+  -F "$sparkle" -framework Sparkle -Xlinker -rpath -Xlinker "$sparkle" \
   "${sources[@]}" "$root/tools/screenshots/main.swift" -o "$work/qs-shots"
 
 mkdir -p "$out"

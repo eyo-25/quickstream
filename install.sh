@@ -61,7 +61,7 @@ if [[ $mode == uninstall ]]; then
 fi
 
 [[ -z $cask_dir ]] || die "퀵스트림이 Homebrew 로 설치되어 있습니다($cask_dir).
-소스 설치와 겹치면 같은 앱이 두 벌이 되고 업데이트가 엉뚱한 쪽으로 갑니다.
+소스 설치와 겹치면 같은 앱이 두 벌이 되어 어느 쪽이 업데이트되는지 헷갈립니다.
 먼저 Homebrew 복사본을 지우세요: brew uninstall --cask quickstream"
 /usr/bin/xcrun --find swiftc >/dev/null 2>&1 || die "빌드에 swiftc 가 필요합니다. Xcode Command Line Tools 를 설치하세요: xcode-select --install
 설치한 뒤 ./install.sh 를 다시 실행하세요."

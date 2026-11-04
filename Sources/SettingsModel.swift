@@ -15,7 +15,11 @@ final class SettingsModel: ObservableObject {
     let catalog: AppCatalog
     private let saveHandler: (Settings) -> ActionResult
     let checkForUpdates: () -> Void
+    /// 정보 화면에 보일 버전 문구(앱에서는 `AppInfo.version`, 스크린샷 도구는 Info.plist 의 값을 넘긴다)
     let versionText: () -> String
+    /// 일정에 따라 새 버전을 자동으로 확인하는지(Sparkle 설정) 읽기·쓰기
+    let updateChecksAutomatically: () -> Bool
+    private let setUpdateChecksAutomatically: (Bool) -> Void
     /// 단축키 녹화 시작(true)/종료(false). 녹화 중에는 전역 단축키를 풀어야 현재 조합을 누를 수 있다.
     private let onRecordingChange: (Bool) -> Void
 
@@ -80,6 +84,8 @@ final class SettingsModel: ObservableObject {
          save: @escaping (Settings) -> ActionResult,
          checkForUpdates: @escaping () -> Void,
          versionText: @escaping () -> String,
+         updateChecksAutomatically: @escaping () -> Bool = { false },
+         setUpdateChecksAutomatically: @escaping (Bool) -> Void = { _ in },
          onRecordingChange: @escaping (Bool) -> Void = { _ in },
          pageMetadata: PageMetadataFetching = WebPageMetadataFetcher(),
          metadataDebounce: Duration = .milliseconds(900)) {
@@ -88,6 +94,8 @@ final class SettingsModel: ObservableObject {
         self.saveHandler = save
         self.checkForUpdates = checkForUpdates
         self.versionText = versionText
+        self.updateChecksAutomatically = updateChecksAutomatically
+        self.setUpdateChecksAutomatically = setUpdateChecksAutomatically
         self.onRecordingChange = onRecordingChange
         self.pageMetadata = pageMetadata
         self.metadataDebounce = metadataDebounce
@@ -248,6 +256,12 @@ final class SettingsModel: ObservableObject {
             if host.hasPrefix("www.") { host.removeFirst(4) }
             draft = SettingsDraft.applyingPageTitle(info.title ?? host, url: url, tab: tabId, slot: slotId, expectedName: nameAtChange, to: draft)
         }
+    }
+
+    /// 자동 업데이트 확인을 켜거나 끈다. Sparkle 이 사용자 설정으로 저장하므로 '저장' 버튼과 무관하게 바로 적용된다.
+    func setAutomaticUpdateChecks(_ on: Bool) {
+        setUpdateChecksAutomatically(on)
+        objectWillChange.send()
     }
 }
 

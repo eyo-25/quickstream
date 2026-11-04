@@ -2,6 +2,9 @@
 build/
 .build/
 
+# 내려받은 Sparkle 프레임워크(tools/sparkle.sh)
+.cache/
+
 # macOS
 .DS_Store
 

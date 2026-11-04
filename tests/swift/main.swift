@@ -4,7 +4,6 @@ import Foundation
 runCoreTests()
 runOverlayTests()
 runSettingsTests()
-runUpdateTests()
 runPageMetadataTests()
 
 print("checks: \(testChecks), failures: \(testFailures)")

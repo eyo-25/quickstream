@@ -67,6 +67,12 @@ for r in "$repo" "$tap_repo"; do
 done
 section=$(/usr/bin/awk -v v="$version" '$1 == "##" && $2 == v {f = 1; next} f && /^## / {exit} f' CHANGELOG.md)
 [[ $section == *[^[:space:]]* ]] || die "CHANGELOG.md 에 '## $version' 섹션이 없습니다. 릴리스 노트로 쓰입니다."
+# 업데이트 서명 키: 로그인 키체인의 Sparkle(EdDSA) 개인키가 앱에 들어간 공개키와 짝이어야 한다. 태그를 달기 전에 확인한다.
+sparkle=$("$project_dir/tools/sparkle.sh")
+plist_key=$(/usr/bin/plutil -extract SUPublicEDKey raw -o - Info.plist)
+keychain_key=$("$sparkle/bin/generate_keys" -p 2>/dev/null || true)
+[[ -n $keychain_key && $keychain_key == "$plist_key" ]] \
+  || die "로그인 키체인의 Sparkle 서명 키('$keychain_key')가 Info.plist 의 SUPublicEDKey('$plist_key')와 다릅니다. 개인키를 가져오세요: $sparkle/bin/generate_keys -f <백업 파일>"
 git fetch -q --tags origin main
 head=$(git rev-parse HEAD)
 current=$(/usr/bin/plutil -extract CFBundleShortVersionString raw Info.plist)
@@ -158,6 +164,24 @@ gh attestation verify "$work/$zip_name" -R "$repo" --signer-workflow "$repo/.git
 .github/verify-app.sh "$work/unzipped/QuickStream.app" "$version"
 sha=$(/usr/bin/shasum -a 256 "$work/$zip_name" | /usr/bin/awk '{print $1}')
 echo "sha256 $sha"
+
+say "업데이트 피드(appcast.xml) 서명·검증"
+# 검증을 마친 바로 그 zip 을 서명한다. 릴리스 노트는 CHANGELOG 의 이 버전 섹션이다. 서명은 로컬 키체인의 개인키로만 하며 CI 에는 키가 없다
+# (처음에는 키체인이 sign_update 의 접근 허용을 물을 수 있다: '항상 허용').
+feed="$work/feed"
+/bin/mkdir -p "$feed"
+printf '%s\n' "$section" > "$feed/notes.md"
+min_os=$(/usr/bin/plutil -extract LSMinimumSystemVersion raw -o - Info.plist)
+tools/make-appcast.sh "$work/$zip_name" "$version" "https://github.com/$repo/releases/download/$tag/$zip_name" "$feed/notes.md" "$min_os" "$feed/appcast.xml"
+xpath() { /usr/bin/xmllint --xpath "$1" "$feed/appcast.xml"; }
+[[ $(xpath 'count(//item)') == 1 ]] || die "appcast.xml 항목이 하나가 아닙니다."
+[[ $(xpath 'string(//item/*[local-name()="shortVersionString"])') == "$version" ]] || die "appcast.xml 의 버전이 $version 이 아닙니다."
+[[ $(xpath 'string(//item/enclosure/@url)') == "https://github.com/$repo/releases/download/$tag/$zip_name" ]] || die "appcast.xml 의 다운로드 주소가 다릅니다."
+[[ $(xpath 'string(//item/enclosure/@length)') == "$(/usr/bin/stat -f %z "$work/$zip_name")" ]] || die "appcast.xml 의 길이가 zip 크기와 다릅니다."
+signature=$(xpath 'string(//item/enclosure/@*[local-name()="edSignature"])')
+[[ -n $signature ]] || die "appcast.xml 에 EdDSA 서명이 없습니다."
+"$sparkle/bin/sign_update" --verify "$work/$zip_name" "$signature" >/dev/null || die "zip 의 EdDSA 서명 검증에 실패했습니다."
+gh release upload "$tag" "$feed/appcast.xml" -R "$repo" --clobber
 
 if [[ $state == draft* ]]; then
   say "latest 표시 없이 $tag 공개"

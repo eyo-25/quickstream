@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- 앱은 ad-hoc 서명이라 Team ID 가 없다. hardened runtime 의 library validation 은 같은 Team ID 나 Apple 이 서명한 라이브러리만 올리므로,
+	     번들에 넣은 Sparkle.framework 를 올리려면 이 항목이 필요하다. 나머지 hardened runtime 보호는 그대로다. -->
+	<key>com.apple.security.cs.disable-library-validation</key>
+	<true/>
+</dict>
+</plist>

@@ -14,11 +14,14 @@ struct AboutPane: View {
                 OneUIRow(symbol: "arrow.triangle.2.circlepath", title: "업데이트 확인") {
                     OneUIPillButton(title: "업데이트 확인", kind: .primary) {
                         model.checkForUpdates()
-                        // 확인 결과가 바로 반영되는 구현이면 버전 문구를 다시 읽는다
-                        model.objectWillChange.send()
                     }
                     .accessibilityLabel("업데이트 확인")
                 }
+                OneUIDivider()
+                OneUIToggleRow(
+                    symbol: "clock.arrow.circlepath", title: "새 버전 자동 확인",
+                    subtitle: "하루에 한 번 GitHub 에서 새 버전이 있는지 확인합니다. 새 버전은 서명을 확인한 뒤에만 설치합니다.",
+                    isOn: model.updateChecksAutomatically()) { model.setAutomaticUpdateChecks($0) }
             }
 
             OneUICard(title: "저장소") {

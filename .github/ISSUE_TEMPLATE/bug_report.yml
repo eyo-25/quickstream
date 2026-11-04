@@ -42,5 +42,5 @@ body:
     id: logs
     attributes:
       label: 로그·설정
-      description: "`~/Library/Application Support/QuickStream/logs` 의 관련 부분이나 `update.log` 를 붙여 주세요. 개인 정보(URL, 클립보드 텍스트)는 지워 주세요."
+      description: "`~/Library/Application Support/QuickStream/logs` 의 관련 부분을 붙여 주세요. 개인 정보(URL, 클립보드 텍스트)는 지워 주세요."
       render: text

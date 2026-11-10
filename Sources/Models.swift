@@ -24,6 +24,7 @@ enum Limits {
     static let centerNameSizeRange: ClosedRange<Int> = 10...32
 }
 
+/// 설정 파일의 탭 `type`. 설정 창에서는 더 이상 구분하지 않지만(모든 탭이 같은 '탭'), 예전 버전·Electron 판과 파일을 주고받도록 값은 그대로 읽고 쓴다.
 enum TabKind: String, Codable, Equatable {
     case pinnedApps = "pinned-apps"
     case custom
@@ -33,14 +34,6 @@ enum TabKind: String, Codable, Equatable {
         switch self {
         case .pinnedApps: return "PINNED"
         case .custom: return "CUSTOM"
-        }
-    }
-
-    /// 사용자에게 보이는 종류 이름
-    var label: String {
-        switch self {
-        case .pinnedApps: return "고정 앱"
-        case .custom: return "커스텀"
         }
     }
 }
@@ -507,10 +500,10 @@ struct Settings: Codable, Equatable {
         }
     }
 
-    /// 첫 실행 기본값: 비어 있는 고정 앱 탭 하나. 탭은 항상 하나 이상 있어야 한다.
+    /// 첫 실행 기본값: 비어 있는 탭 하나. 탭은 항상 하나 이상 있어야 한다.
     static var defaults: Settings {
         var s = Settings()
-        s.tabs = [Tab(id: "pinned", name: "고정 앱", type: .pinnedApps, slots: [])]
+        s.tabs = [Tab(id: "pinned", name: "탭 1", type: .pinnedApps, slots: [])]
         return s
     }
 }

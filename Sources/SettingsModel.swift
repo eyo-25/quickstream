@@ -200,8 +200,8 @@ final class SettingsModel: ObservableObject {
         draft = Settings.defaults
     }
 
-    func addTab(_ type: TabKind) {
-        let next = SettingsDraft.addTab(draft, type)
+    func addTab() {
+        let next = SettingsDraft.addTab(draft)
         guard next != draft else { return }
         draft = next
         if let id = next.tabs.last?.id { selection = .tab(id) }

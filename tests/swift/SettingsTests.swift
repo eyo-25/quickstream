@@ -71,13 +71,15 @@ private func tabEditing() {
     section("Settings: 탭 편집")
 
     var s = fixture()
-    while s.tabs.count < Limits.maxTabs { s = D.addTab(s, .custom) }
+    while s.tabs.count < Limits.maxTabs { s = D.addTab(s) }
     checkEqual(Set(s.tabs.map(\.id)).count, 8, "추가한 탭 id 는 서로 다르다")
     check(s.tabs.suffix(5).allSatisfy { isGeneratedId($0.id, "tab") }, "새 탭 id 는 tab-xxxxxx 형식")
     var over = s
-    for _ in 0..<3 { over = D.addTab(over, .custom) }
+    for _ in 0..<3 { over = D.addTab(over) }
     checkEqual(over.tabs.count, 8, "탭은 8개를 넘길 수 없다")
-    check(D.addTab(D.addTab(Settings.defaults, .custom), .pinnedApps).tabs.last?.slots.isEmpty == true, "새 탭은 슬롯 없이 시작")
+    check(D.addTab(D.addTab(Settings.defaults)).tabs.last?.slots.isEmpty == true, "새 탭은 슬롯 없이 시작")
+    checkEqual(D.addTab(D.addTab(Settings.defaults)).tabs.map(\.name), ["탭 1", "탭 2", "탭 3"], "새 탭 이름은 겹치지 않는 가장 작은 번호")
+    checkEqual(D.addTab(Settings.defaults).tabs.last?.type, .custom, "새 탭은 예전 버전과 호환되는 custom 으로 저장")
 
     let base = fixture()
 
@@ -104,7 +106,7 @@ private func tabEditing() {
     checkEqual(D.duplicateTab(long, at: 2).tabs[3].name.count, 20, "복제 이름은 20자 상한")
 
     var full = base
-    while full.tabs.count < 8 { full = D.addTab(full, .custom) }
+    while full.tabs.count < 8 { full = D.addTab(full) }
     checkEqual(D.duplicateTab(full, at: 1), full, "탭이 가득 차면 복제 불가")
 
     let defaults = Settings.defaults
@@ -148,7 +150,7 @@ private func tabEditing() {
 private func slotEditing() {
     section("Settings: 슬롯 편집")
 
-    var s = D.addTab(fixture(), .custom)
+    var s = D.addTab(fixture())
     let t = s.tabs.count - 1
     for _ in 0..<12 { s = D.addSlot(s, tab: t) }
     checkEqual(slots(s, t).count, 8, "슬롯은 8개까지만")
@@ -350,7 +352,7 @@ private func dirtyDetection() {
     let s = fixture()
     check(!D.isDirty(baseline: s, draft: s), "같으면 변경 없음")
     check(D.isDirty(baseline: s, draft: D.updateSlot(s, tab: 1, at: 0) { $0.name = "다른 이름" }), "실제 편집은 변경")
-    check(D.isDirty(baseline: s, draft: D.addTab(s, .custom)), "탭 추가는 변경")
+    check(D.isDirty(baseline: s, draft: D.addTab(s)), "탭 추가는 변경")
 
     // 파일로 저장했다 읽은 값(정규화)과 편집 중 값이 표현만 다르면 변경이 아니다
 

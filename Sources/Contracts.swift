@@ -53,7 +53,7 @@ struct ValidationIssue: Equatable {
     /// nil 이면 일반(단축키·모양) 항목
     var tabIndex: Int?
     var slotIndex: Int?
-    /// 사용자에게 보이는 위치 + 사유. 예: `탭 "고정 앱" > 슬롯 3 > URL: http/https URL 만 허용됩니다`
+    /// 사용자에게 보이는 위치 + 사유. 예: `탭 "탭 1" > 슬롯 3 > URL: http/https URL 만 허용됩니다`
     var text: String
 }
 

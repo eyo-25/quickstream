@@ -94,10 +94,14 @@ enum SettingsDraft {
 
     static func canAddTab(_ s: Settings) -> Bool { s.tabs.count < Limits.maxTabs }
 
-    static func addTab(_ s: Settings, _ type: TabKind, name: String? = nil) -> Settings {
+    /// 새 탭을 끝에 추가한다. 탭 종류 구분은 없어졌다(설정 파일의 `type` 은 예전 버전과 호환되도록 `custom` 으로 저장한다).
+    /// 이름을 주지 않으면 비어 있는 번호 중 가장 작은 "탭 N".
+    static func addTab(_ s: Settings, name: String? = nil) -> Settings {
         guard canAddTab(s) else { return s }
         var next = s
-        next.tabs.append(Tab(id: newId("tab", taken: s.tabs.map(\.id)), name: name ?? type.label, type: type))
+        let names = Set(s.tabs.map(\.name))
+        let fallback = (1...).lazy.map { "탭 \($0)" }.first { !names.contains($0) }!
+        next.tabs.append(Tab(id: newId("tab", taken: s.tabs.map(\.id)), name: name ?? fallback, type: .custom))
         return next
     }
 

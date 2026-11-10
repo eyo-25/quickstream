@@ -55,7 +55,7 @@ struct TabsPane: View {
         .animation(Motion.animation(Motion.chewy), value: selected)
     }
 
-    /// 이름 편집 + 종류 칩 (+ 탭 단위 검증 이슈)
+    /// 이름 편집 (+ 탭 단위 검증 이슈)
     private var tabCard: some View {
         OneUICard(title: "탭") {
             OneUIRow(title: "탭 이름") {
@@ -65,15 +65,6 @@ struct TabsPane: View {
                     .oneUIField()
                     .frame(width: 260)
                     .accessibilityLabel("탭 이름")
-            }
-            OneUIDivider(inset: OneUI.rowInset)
-            OneUIRow(title: "탭 종류") {
-                Text(tab.type.label)
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(pal.accentText)
-                    .padding(.horizontal, 12).padding(.vertical, 5)
-                    .background(pal.accentText.opacity(0.18), in: Capsule())
-                    .accessibilityLabel("탭 종류: \(tab.type.label)")
             }
             ForEach(Array(tabIssues.filter { $0.slotIndex == nil }.enumerated()), id: \.offset) { _, issue in
                 OneUIDivider(inset: OneUI.rowInset)

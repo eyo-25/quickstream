@@ -171,13 +171,6 @@ private struct SettingsSidebar: View {
     private func tabHasIssue(_ i: Int) -> Bool { model.issues.contains { $0.tabIndex == i } }
     private var generalHasIssue: Bool { model.issues.contains { $0.tabIndex == nil } }
 
-    private func symbol(for type: TabKind) -> String {
-        switch type {
-        case .pinnedApps: return "pin"
-        case .custom: return "square.grid.2x2"
-        }
-    }
-
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 4) {
@@ -192,14 +185,14 @@ private struct SettingsSidebar: View {
                 HStack {
                     header("탭 (\(model.draft.tabs.count)/\(Limits.maxTabs))")
                     Spacer()
-                    addMenu
+                    addButton
                 }
                 .padding(.top, 14)
 
                 ForEach(Array(model.draft.tabs.enumerated()), id: \.element.id) { i, tab in
                     let selected = model.selection == .tab(tab.id)
                     VStack(alignment: .leading, spacing: 4) {
-                        row(symbol: symbol(for: tab.type), title: tab.name.isEmpty ? "(이름 없음)" : tab.name, detail: tab.type.label, selected: selected, warn: tabHasIssue(i)) {
+                        row(symbol: "square.grid.2x2", title: tab.name.isEmpty ? "(이름 없음)" : tab.name, detail: nil, selected: selected, warn: tabHasIssue(i)) {
                             select(.tab(tab.id))
                         }
                         .draggable(TabDragItem(id: tab.id))
@@ -248,16 +241,11 @@ private struct SettingsSidebar: View {
         SidebarRow(symbol: symbol, title: title, detail: detail, selected: selected, warn: warn, namespace: selectionSpace, action: action)
     }
 
-    private var addMenu: some View {
-        Menu {
-            Button("커스텀 탭") { chewyChange { model.addTab(.custom) } }
-            Button("고정 앱 탭") { chewyChange { model.addTab(.pinnedApps) } }
-        } label: {
+    private var addButton: some View {
+        Button { chewyChange { model.addTab() } } label: {
             Image(systemName: "plus")
         }
-        .menuStyle(.borderlessButton)
-        .menuIndicator(.hidden)
-        .fixedSize()
+        .buttonStyle(.borderless)
         .disabled(!SettingsDraft.canAddTab(model.draft))
         .accessibilityLabel("탭 추가")
     }

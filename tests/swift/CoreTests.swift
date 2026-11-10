@@ -204,12 +204,12 @@ private func testValidator() {
 
     s = settings(slots: [slot("a"), slot("a")])
     let dup = SettingsValidator.validate(s).first
-    checkEqual(dup?.text, "탭 \"고정 앱\" > 슬롯 2 > 식별자: 슬롯 id 중복: a", "슬롯 id 중복 문구")
+    checkEqual(dup?.text, "탭 \"탭 1\" > 슬롯 2 > 식별자: 슬롯 id 중복: a", "슬롯 id 중복 문구")
     checkEqual(dup?.slotIndex, 1, "슬롯 id 중복 위치")
     // 빈 칸이 있어도 이슈의 슬롯 위치는 링 위치(0부터)다: 12시, 비어 있음 ×2, 슬롯 4번 칸의 id 중복
     s = settings(slots: [slot("a"), nil, nil, slot("a")])
     let gapDup = SettingsValidator.validate(s).first
-    checkEqual(gapDup?.text, "탭 \"고정 앱\" > 슬롯 4 > 식별자: 슬롯 id 중복: a", "빈 칸 뒤 슬롯의 번호는 링 위치")
+    checkEqual(gapDup?.text, "탭 \"탭 1\" > 슬롯 4 > 식별자: 슬롯 id 중복: a", "빈 칸 뒤 슬롯의 번호는 링 위치")
     checkEqual(gapDup?.slotIndex, 3, "빈 칸 뒤 슬롯의 이슈 위치")
 
     // 슬롯 추가 키·방향키·닫기 키: 형식, 중복, 칸 번호 키·닫기 키와 겹침
@@ -293,7 +293,7 @@ private func testValidator() {
     // 액션
     s = settings(slots: [slot("a"), slot("b"), slot("c", .openURL("ftp://example.com"), name: "x")])
     let urlIssue = SettingsValidator.validate(s).first
-    checkEqual(urlIssue?.text, "탭 \"고정 앱\" > 슬롯 3 > URL: http/https URL 만 허용됩니다", "잘못된 URL 문구")
+    checkEqual(urlIssue?.text, "탭 \"탭 1\" > 슬롯 3 > URL: http/https URL 만 허용됩니다", "잘못된 URL 문구")
     checkEqual(urlIssue?.slotIndex, 2, "잘못된 URL 슬롯 위치")
     for bad in ["javascript:alert(1)", "not a url", "", "https://", "file:///etc/passwd"] {
         check(hasIssue(settings(slots: [slot("a", .openURL(bad))]), containing: "URL"), "URL 거부: \(bad)")
@@ -332,9 +332,9 @@ private func testValidator() {
     checkEqual(issues(s), [], "매크로 단계 16개 허용")
     s = settings(slots: [slot("a", .macroSequence(stopOnError: true, steps: [step, .macroSequence(stopOnError: true, steps: [step])]))])
     let nested = SettingsValidator.validate(s).first
-    checkEqual(nested?.text, "탭 \"고정 앱\" > 슬롯 1 > 매크로 단계 2 > 종류: 매크로 안에 매크로를 넣을 수 없습니다", "중첩 매크로 금지")
+    checkEqual(nested?.text, "탭 \"탭 1\" > 슬롯 1 > 매크로 단계 2 > 종류: 매크로 안에 매크로를 넣을 수 없습니다", "중첩 매크로 금지")
     s = settings(slots: [slot("a", .macroSequence(stopOnError: false, steps: [step, .openURL("ftp://x")]))])
-    checkEqual(SettingsValidator.validate(s).first?.text, "탭 \"고정 앱\" > 슬롯 1 > 매크로 단계 2 > URL: http/https URL 만 허용됩니다", "매크로 단계 안의 URL 검증")
+    checkEqual(SettingsValidator.validate(s).first?.text, "탭 \"탭 1\" > 슬롯 1 > 매크로 단계 2 > URL: http/https URL 만 허용됩니다", "매크로 단계 안의 URL 검증")
     s = settings(slots: [slot("a", .macroSequence(stopOnError: true, steps: [.activateApp(bundleId: "a.b", pid: nil)]))])
     check(hasIssue(s, containing: "매크로 단계 1 > 종류: 매크로 단계에는 앱 전환"), "매크로 단계에 activate_app 금지")
 

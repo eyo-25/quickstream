@@ -8,7 +8,7 @@ func isHttpURL(_ value: String) -> Bool {
 }
 
 /// 설정 검증. Electron 판 zod 스키마(src/shared/schema.ts)와 같은 제약을 걸고,
-/// 위치 문자열은 설정 창 issues.ts 와 같은 형식(`탭 "고정 앱" > 슬롯 3 > URL: …`)으로 만든다.
+/// 위치 문자열은 설정 창 issues.ts 와 같은 형식(`탭 "탭 1" > 슬롯 3 > URL: …`)으로 만든다.
 enum SettingsValidator {
     /// 문제가 없으면 빈 배열
     static func validate(_ settings: Settings) -> [ValidationIssue] {

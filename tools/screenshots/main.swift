@@ -111,7 +111,7 @@ func overlayState(_ o: OverlaySettings, selected: Int = 0) -> OverlayState {
     let slotViews: [SlotView?] = demoApps.map { app in
         SlotView(id: app.id, name: app.name, label: slotInitials(app.name), verb: "LAUNCH", iconPNG: demoIconPNG(app, pixels: 160))
     }
-    let tabs = [TabView(id: "pinned", name: "고정 앱", caption: "PINNED", slots: slotViews)]
+    let tabs = [TabView(id: "pinned", name: "탭 1", caption: "PINNED", slots: slotViews)]
     return OverlayState(tabs: tabs, activeTab: 0, alpha: o.alpha, radius: o.radius,
                         ringRadius: o.ringSize, centerRadius: o.centerSize, centerBorder: o.centerBorder,
                         theme: o.theme, namePlacement: o.namePlacement, showNumbers: o.showNumbers,
